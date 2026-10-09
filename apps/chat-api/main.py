@@ -1,131 +1,284 @@
+"""ChatAI chat API: the public REST + WebSocket gateway on :8000.
+
+Persistence lives in store.py (SQLite), live fan-out in realtime.py. The AI service is
+called over HTTP with a timeout and a fallback for every route, so chat keeps working
+when AI is slow or down.
+"""
+import asyncio
+import json
+import logging
 import os
-import sqlite3
+import re
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from contextlib import closing
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from typing import Annotated
+
 import httpx
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field, StringConstraints
 
-DB = os.getenv("DB_PATH", "chat.db")
+import nudges
+import store
+from realtime import Client, Hub
+
 AI_URL = os.getenv("AI_URL", "http://localhost:8001")
-app = FastAPI(title="ChatAI Chat API")
-app.add_middleware(CORSMiddleware, allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:5173").split(","), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-connections: set[WebSocket] = set()
+AI_TIMEOUT = 15
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 
-def conn():
-    c = sqlite3.connect(DB)
-    c.row_factory = sqlite3.Row
-    return c
+log = logging.getLogger("chat-api")
+hub = Hub()
+background: set[asyncio.Task] = set()
 
-@app.on_event("startup")
-def init():
-    with closing(conn()) as db:
-        db.execute("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, room TEXT NOT NULL, user TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL)")
-        db.execute("CREATE TABLE IF NOT EXISTS polls(id INTEGER PRIMARY KEY AUTOINCREMENT, question TEXT NOT NULL, options TEXT NOT NULL)")
-        db.execute("CREATE TABLE IF NOT EXISTS votes(poll_id INTEGER NOT NULL, user TEXT NOT NULL, option_index INTEGER NOT NULL, PRIMARY KEY(poll_id,user))")
-        db.commit()
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+RoomId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+RoomName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+Emoji = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16)]
+PollText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    store.init()
+    async with httpx.AsyncClient(timeout=AI_TIMEOUT) as client:
+        app.state.ai = client
+        yield
+    for task in list(background):
+        task.cancel()
+
+
+app = FastAPI(title="ChatAI Chat API", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in CORS_ORIGINS.split(",") if o.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+for error, status in ((store.NotFound, 404), (store.Forbidden, 403), (store.Conflict, 409), (store.Invalid, 400)):
+    async def handler(request: Request, exc: Exception, status: int = status):
+        return JSONResponse({"detail": str(exc)}, status_code=status)
+    app.add_exception_handler(error, handler)
+
+
+def clean_user(user: str | None) -> str | None:
+    return (user or "").strip()[:40] or None
+
+
+def run_in_background(coro) -> None:
+    task = asyncio.create_task(coro)
+    background.add(task)
+    task.add_done_callback(_background_done)
+
+
+def _background_done(task: asyncio.Task) -> None:
+    background.discard(task)
+    if not task.cancelled() and task.exception():
+        log.warning("Background task failed: %r", task.exception())
+
 
 class NewMessage(BaseModel):
-    user: str = Field(min_length=1, max_length=40)
-    text: str = Field(min_length=1, max_length=2000)
-    room: str = "demo"
+    user: Name
+    text: Text
+    room: RoomId = store.DEFAULT_ROOM
+    reply_to: int | None = None
+    # Echoed back on the response and the WebSocket event so the sender can match
+    # its optimistic copy. Not stored.
+    client_id: str | None = Field(default=None, max_length=64)
+
+
+class EditMessage(BaseModel):
+    user: Name
+    text: Text
+
+
+class ReactionIn(BaseModel):
+    user: Name
+    emoji: Emoji
+
+
+class NewRoom(BaseModel):
+    name: RoomName
+    created_by: Name | None = None
+
+
+class ReadIn(BaseModel):
+    user: Name
+    message_id: int = Field(ge=0)
+
 
 class PollIn(BaseModel):
-    question: str
-    options: list[str]
+    question: PollText
+    options: list[PollText] = Field(min_length=2, max_length=10)
+    room: RoomId = store.DEFAULT_ROOM
+    created_by: Name | None = None
+
 
 class VoteIn(BaseModel):
-    user: str
+    user: Name
     option_index: int
+
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
+
+# ---------------------------------------------------------------- rooms
+
+@app.get("/rooms")
+def rooms(user: str | None = None):
+    return store.list_rooms(clean_user(user))
+
+
+@app.post("/rooms", status_code=201)
+async def create_room(body: NewRoom):
+    room = store.create_room(body.name, body.created_by)
+    await hub.broadcast({"type": "room", "room": {**room, "unread": 0}})
+    return room
+
+
+@app.post("/rooms/{room}/read")
+async def mark_read(room: str, body: ReadIn):
+    position, moved = store.mark_read(room, body.user, body.message_id)
+    if moved:
+        await hub.broadcast({"type": "read", "room": room, "user": body.user, "message_id": position}, room=room)
+    return {"room": room, "user": body.user, "message_id": position}
+
+
+# ---------------------------------------------------------------- messages
+
 @app.get("/messages")
-def messages(room: str = "demo"):
-    with closing(conn()) as db:
-        return [dict(r) for r in db.execute("SELECT * FROM messages WHERE room=? ORDER BY id DESC LIMIT 100", (room,)).fetchall()][::-1]
+def messages(
+    room: str = store.DEFAULT_ROOM,
+    limit: int = Query(store.PAGE_LIMIT, ge=1, le=store.PAGE_LIMIT),
+    before_id: int | None = None,
+    after_id: int | None = None,
+):
+    return store.list_messages(room, limit, before_id, after_id)
+
 
 @app.post("/messages", status_code=201)
 async def post_message(m: NewMessage):
-    created = datetime.now(timezone.utc).isoformat()
-    with closing(conn()) as db:
-        cur = db.execute("INSERT INTO messages(room,user,text,created_at) VALUES (?,?,?,?)", (m.room,m.user,m.text,created))
-        db.commit()
-        output = {"id":cur.lastrowid, "room":m.room, "user":m.user, "text":m.text, "created_at":created}
-    for ws in list(connections):
-        try: await ws.send_json({"type":"message", "message":output})
-        except Exception: connections.discard(ws)
-    return output
+    message = store.create_message(m.room, m.user, m.text, m.reply_to)
+    if m.client_id:
+        message["client_id"] = m.client_id
+    await hub.broadcast({"type": "message", "message": message}, room=m.room)
+    run_in_background(nudges.after_message(message, hub))
+    return message
+
+
+@app.patch("/messages/{message_id}")
+async def edit_message(message_id: int, body: EditMessage):
+    message = store.edit_message(message_id, body.user, body.text)
+    await hub.broadcast({"type": "message_updated", "message": message}, room=message["room"])
+    return message
+
+
+@app.delete("/messages/{message_id}")
+async def delete_message(message_id: int, user: Annotated[str, Query(min_length=1, max_length=40)]):
+    message = store.delete_message(message_id, user.strip())
+    await hub.broadcast({"type": "message_updated", "message": message}, room=message["room"])
+    return message
+
+
+@app.post("/messages/{message_id}/reactions")
+async def react(message_id: int, body: ReactionIn):
+    message = store.toggle_reaction(message_id, body.user, body.emoji)
+    await hub.broadcast({"type": "message_updated", "message": message}, room=message["room"])
+    return message
+
 
 @app.websocket("/ws")
-async def ws_messages(ws: WebSocket):
+async def ws_events(ws: WebSocket, user: str | None = None, room: str | None = None):
+    """Server events: message, message_updated, typing, presence, read, room, poll,
+    pong (and nudge, reserved for the AI pipeline). Client events: typing, ping."""
     await ws.accept()
-    connections.add(ws)
+    client = Client(ws, clean_user(user), room or None)
+    await hub.join(client)
     try:
-        while True: await ws.receive_text()
+        while True:
+            try:
+                data = json.loads(await ws.receive_text())
+            except ValueError:
+                continue
+            if not isinstance(data, dict):
+                continue
+            if data.get("type") == "ping":
+                await hub.send(client, {"type": "pong"})
+            elif data.get("type") == "typing" and client.user and isinstance(data.get("room"), str):
+                target = data["room"][:64]
+                event = {"type": "typing", "room": target, "user": client.user, "active": data.get("active") is not False}
+                await hub.broadcast(event, room=target, exclude=client)
     except WebSocketDisconnect:
-        connections.discard(ws)
-    except Exception:
-        connections.discard(ws)
+        pass
+    except Exception as exc:
+        log.info("WebSocket closed: %r", exc)
+    finally:
+        hub.leave(client)
+        if client.user:
+            run_in_background(hub.broadcast_presence())
+
+
+# ---------------------------------------------------------------- AI gateway
 
 async def ai_call(path: str, payload: dict, fallback: dict):
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(AI_URL + path, json=payload)
-            r.raise_for_status()
-            return r.json()
-    except Exception:
+        r = await app.state.ai.post(AI_URL + path, json=payload)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        log.warning("AI %s unavailable: %r", path, exc)
         return fallback
 
+
 @app.get("/digest")
-async def digest():
-    return await ai_call("/digest", {"messages":messages()}, {"summary":"AI temporarily unavailable; chat remains operational."})
+async def digest(room: str = store.DEFAULT_ROOM):
+    history = store.recent_for_ai(room)
+    return await ai_call("/digest", {"messages": history}, {"summary": "AI temporarily unavailable; chat remains operational."})
+
 
 @app.get("/search")
-async def search(query: str):
-    return await ai_call("/search", {"messages":messages(), "query":query}, {"results":[m for m in messages() if query.lower() in m["text"].lower()], "mode":"keyword"})
+async def search(query: str, room: str = store.DEFAULT_ROOM):
+    history = store.recent_for_ai(room)
+    keyword = [m for m in history if query.lower() in m["text"].lower()]
+    return await ai_call("/search", {"messages": history, "query": query}, {"results": keyword, "mode": "keyword"})
+
 
 @app.get("/suggest")
-async def suggest():
-    return await ai_call("/suggest", {"messages":messages()}, {"suggestion":"No suggestion"})
+async def suggest(room: str = store.DEFAULT_ROOM):
+    history = store.recent_for_ai(room)
+    return await ai_call("/suggest", {"messages": history}, {"suggestion": "No suggestion"})
+
+
+# ---------------------------------------------------------------- polls and calendar
 
 @app.get("/polls")
-def polls():
-    import json
-    with closing(conn()) as db:
-        rows=db.execute("SELECT * FROM polls ORDER BY id DESC").fetchall()
-        return [{"id":r["id"],"question":r["question"],"options":json.loads(r["options"])} for r in rows]
+def polls(room: str | None = None):
+    return store.list_polls(room)
+
 
 @app.post("/polls")
-def create_poll(p: PollIn):
-    import json
-    with closing(conn()) as db:
-        cur=db.execute("INSERT INTO polls(question,options) VALUES(?,?)", (p.question,json.dumps(p.options)))
-        db.commit()
-        return {"id":cur.lastrowid, **p.model_dump()}
+async def create_poll(p: PollIn):
+    poll = store.create_poll(p.question, p.options, p.room, p.created_by)
+    await hub.broadcast({"type": "poll", "poll": poll}, room=poll["room"])
+    return poll
+
 
 @app.post("/polls/{poll_id}/votes")
-def vote(poll_id: int, data: VoteIn):
-    from fastapi import HTTPException
-    with closing(conn()) as db:
-        poll = db.execute("SELECT options FROM polls WHERE id=?", (poll_id,)).fetchone()
-        if not poll: raise HTTPException(404,"Poll not found")
-        import json
-        if not (0 <= data.option_index < len(json.loads(poll["options"]))): raise HTTPException(400,"Invalid option")
-        db.execute("INSERT OR REPLACE INTO votes(poll_id,user,option_index) VALUES (?,?,?)", (poll_id,data.user,data.option_index))
-        db.commit()
-    return {"ok":True}
+async def vote(poll_id: int, data: VoteIn):
+    poll = store.vote(poll_id, data.user, data.option_index)
+    await hub.broadcast({"type": "poll", "poll": poll}, room=poll["room"])
+    return {"ok": True, "poll": poll}
+
 
 @app.get("/calendar.ics")
 def calendar(title: str = "Group event", date: str = "20261010T120000Z"):
-    from fastapi.responses import Response
-    import re
-    if not re.fullmatch(r"\d{8}T\d{6}Z",date):
-        from fastapi import HTTPException
-        raise HTTPException(400,"Date must be YYYYMMDDTHHMMSSZ in UTC")
-    safe = title.replace("\\","\\\\").replace(";","\\;").replace(",","\\,").replace("\n","\\n")
-    body=f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//ChatAI//EN\r\nBEGIN:VEVENT\r\nUID:demo-{date}@chatai\r\nDTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}\r\nDTSTART:{date}\r\nSUMMARY:{safe}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
-    return Response(body, media_type="text/calendar", headers={"Content-Disposition":"attachment; filename=event.ics"})
+    if not re.fullmatch(r"\d{8}T\d{6}Z", date):
+        raise HTTPException(400, "Date must be YYYYMMDDTHHMMSSZ in UTC")
+    safe = title.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+    body = f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//ChatAI//EN\r\nBEGIN:VEVENT\r\nUID:demo-{date}@chatai\r\nDTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}\r\nDTSTART:{date}\r\nSUMMARY:{safe}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+    return Response(body, media_type="text/calendar", headers={"Content-Disposition": "attachment; filename=event.ics"})
