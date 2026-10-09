@@ -3,6 +3,7 @@
 Single-process by design. Clients connected to another chat-api instance would not
 see each other's events; scaling out needs a shared pub/sub (see docs/ARCHITECTURE.md).
 """
+
 import asyncio
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -56,7 +57,9 @@ class Hub:
                 await asyncio.wait_for(client.ws.close(code=1011), 1)
             return False
 
-    async def broadcast(self, event: dict, room: str | None = None, exclude: Client | None = None) -> None:
+    async def broadcast(
+        self, event: dict, room: str | None = None, exclude: Client | None = None
+    ) -> None:
         """Send to every client subscribed to `room` (all clients when room is None)."""
         targets = [c for c in self.clients if c is not exclude and c.wants(room)]
         await asyncio.gather(*(self.send(c, event) for c in targets))

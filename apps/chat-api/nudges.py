@@ -4,6 +4,7 @@ main.post_message schedules after_message() as a background task once a message
 is saved and broadcast, so it never delays sending. Errors are logged and dropped:
 chat must keep working when the AI service is slow or down.
 """
+
 from realtime import Hub
 
 

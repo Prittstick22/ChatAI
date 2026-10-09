@@ -4,6 +4,7 @@ Persistence lives in store.py (SQLite), live fan-out in realtime.py. The AI serv
 called over HTTP with a timeout and a fallback for every route, so chat keeps working
 when AI is slow or down.
 """
+
 import asyncio
 import json
 import logging
@@ -14,7 +15,14 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, StringConstraints
@@ -31,12 +39,24 @@ log = logging.getLogger("chat-api")
 hub = Hub()
 background: set[asyncio.Task] = set()
 
-Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
-Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
-RoomId = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
-RoomName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
-Emoji = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16)]
-PollText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Name = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)
+]
+Text = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)
+]
+RoomId = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+]
+RoomName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)
+]
+Emoji = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16)
+]
+PollText = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+]
 
 
 @asynccontextmanager
@@ -58,9 +78,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for error, status in ((store.NotFound, 404), (store.Forbidden, 403), (store.Conflict, 409), (store.Invalid, 400)):
+for error, status in (
+    (store.NotFound, 404),
+    (store.Forbidden, 403),
+    (store.Conflict, 409),
+    (store.Invalid, 400),
+):
+
     async def handler(request: Request, exc: Exception, status: int = status):
         return JSONResponse({"detail": str(exc)}, status_code=status)
+
     app.add_exception_handler(error, handler)
 
 
@@ -129,6 +156,7 @@ async def health():
 
 # ---------------------------------------------------------------- rooms
 
+
 @app.get("/rooms")
 def rooms(user: str | None = None):
     return store.list_rooms(clean_user(user))
@@ -145,11 +173,15 @@ async def create_room(body: NewRoom):
 async def mark_read(room: str, body: ReadIn):
     position, moved = store.mark_read(room, body.user, body.message_id)
     if moved:
-        await hub.broadcast({"type": "read", "room": room, "user": body.user, "message_id": position}, room=room)
+        await hub.broadcast(
+            {"type": "read", "room": room, "user": body.user, "message_id": position},
+            room=room,
+        )
     return {"room": room, "user": body.user, "message_id": position}
 
 
 # ---------------------------------------------------------------- messages
+
 
 @app.get("/messages")
 def messages(
@@ -174,21 +206,29 @@ async def post_message(m: NewMessage):
 @app.patch("/messages/{message_id}")
 async def edit_message(message_id: int, body: EditMessage):
     message = store.edit_message(message_id, body.user, body.text)
-    await hub.broadcast({"type": "message_updated", "message": message}, room=message["room"])
+    await hub.broadcast(
+        {"type": "message_updated", "message": message}, room=message["room"]
+    )
     return message
 
 
 @app.delete("/messages/{message_id}")
-async def delete_message(message_id: int, user: Annotated[str, Query(min_length=1, max_length=40)]):
+async def delete_message(
+    message_id: int, user: Annotated[str, Query(min_length=1, max_length=40)]
+):
     message = store.delete_message(message_id, user.strip())
-    await hub.broadcast({"type": "message_updated", "message": message}, room=message["room"])
+    await hub.broadcast(
+        {"type": "message_updated", "message": message}, room=message["room"]
+    )
     return message
 
 
 @app.post("/messages/{message_id}/reactions")
 async def react(message_id: int, body: ReactionIn):
     message = store.toggle_reaction(message_id, body.user, body.emoji)
-    await hub.broadcast({"type": "message_updated", "message": message}, room=message["room"])
+    await hub.broadcast(
+        {"type": "message_updated", "message": message}, room=message["room"]
+    )
     return message
 
 
@@ -209,9 +249,18 @@ async def ws_events(ws: WebSocket, user: str | None = None, room: str | None = N
                 continue
             if data.get("type") == "ping":
                 await hub.send(client, {"type": "pong"})
-            elif data.get("type") == "typing" and client.user and isinstance(data.get("room"), str):
+            elif (
+                data.get("type") == "typing"
+                and client.user
+                and isinstance(data.get("room"), str)
+            ):
                 target = data["room"][:64]
-                event = {"type": "typing", "room": target, "user": client.user, "active": data.get("active") is not False}
+                event = {
+                    "type": "typing",
+                    "room": target,
+                    "user": client.user,
+                    "active": data.get("active") is not False,
+                }
                 await hub.broadcast(event, room=target, exclude=client)
     except WebSocketDisconnect:
         pass
@@ -224,6 +273,7 @@ async def ws_events(ws: WebSocket, user: str | None = None, room: str | None = N
 
 
 # ---------------------------------------------------------------- AI gateway
+
 
 async def ai_call(path: str, payload: dict, fallback: dict):
     try:
@@ -238,23 +288,34 @@ async def ai_call(path: str, payload: dict, fallback: dict):
 @app.get("/digest")
 async def digest(room: str = store.DEFAULT_ROOM):
     history = store.recent_for_ai(room)
-    return await ai_call("/digest", {"messages": history}, {"summary": "AI temporarily unavailable; chat remains operational."})
+    return await ai_call(
+        "/digest",
+        {"messages": history},
+        {"summary": "AI temporarily unavailable; chat remains operational."},
+    )
 
 
 @app.get("/search")
 async def search(query: str, room: str = store.DEFAULT_ROOM):
     history = store.recent_for_ai(room)
     keyword = [m for m in history if query.lower() in m["text"].lower()]
-    return await ai_call("/search", {"messages": history, "query": query}, {"results": keyword, "mode": "keyword"})
+    return await ai_call(
+        "/search",
+        {"messages": history, "query": query},
+        {"results": keyword, "mode": "keyword"},
+    )
 
 
 @app.get("/suggest")
 async def suggest(room: str = store.DEFAULT_ROOM):
     history = store.recent_for_ai(room)
-    return await ai_call("/suggest", {"messages": history}, {"suggestion": "No suggestion"})
+    return await ai_call(
+        "/suggest", {"messages": history}, {"suggestion": "No suggestion"}
+    )
 
 
 # ---------------------------------------------------------------- polls and calendar
+
 
 @app.get("/polls")
 def polls(room: str | None = None):
@@ -279,6 +340,15 @@ async def vote(poll_id: int, data: VoteIn):
 def calendar(title: str = "Group event", date: str = "20261010T120000Z"):
     if not re.fullmatch(r"\d{8}T\d{6}Z", date):
         raise HTTPException(400, "Date must be YYYYMMDDTHHMMSSZ in UTC")
-    safe = title.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+    safe = (
+        title.replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\n", "\\n")
+    )
     body = f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//ChatAI//EN\r\nBEGIN:VEVENT\r\nUID:demo-{date}@chatai\r\nDTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}\r\nDTSTART:{date}\r\nSUMMARY:{safe}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
-    return Response(body, media_type="text/calendar", headers={"Content-Disposition": "attachment; filename=event.ics"})
+    return Response(
+        body,
+        media_type="text/calendar",
+        headers={"Content-Disposition": "attachment; filename=event.ics"},
+    )

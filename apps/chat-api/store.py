@@ -3,6 +3,7 @@
 Every function opens its own short-lived connection, so the module is safe to call
 from FastAPI's threadpool and from async handlers alike.
 """
+
 import json
 import os
 import re
@@ -77,7 +78,9 @@ def init() -> None:
         db.execute("PRAGMA journal_mode = WAL")
         version = db.execute("PRAGMA user_version").fetchone()[0]
         for number, script in enumerate(MIGRATIONS[version:], start=version + 1):
-            db.executescript(f"BEGIN;\n{script}\nPRAGMA user_version = {number};\nCOMMIT;")
+            db.executescript(
+                f"BEGIN;\n{script}\nPRAGMA user_version = {number};\nCOMMIT;"
+            )
         with db:
             db.execute(
                 "INSERT OR IGNORE INTO rooms(id, name, created_by, created_at) VALUES (?, ?, NULL, ?)",
@@ -104,8 +107,13 @@ def _reactions(db: sqlite3.Connection, ids: list[int]) -> dict[int, list[dict]]:
     ).fetchall()
     grouped: dict[int, dict[str, list[str]]] = {}
     for row in rows:
-        grouped.setdefault(row["message_id"], {}).setdefault(row["emoji"], []).append(row["user"])
-    return {mid: [{"emoji": e, "users": users} for e, users in emojis.items()] for mid, emojis in grouped.items()}
+        grouped.setdefault(row["message_id"], {}).setdefault(row["emoji"], []).append(
+            row["user"]
+        )
+    return {
+        mid: [{"emoji": e, "users": users} for e, users in emojis.items()]
+        for mid, emojis in grouped.items()
+    }
 
 
 def _message(row: sqlite3.Row, reactions: dict[int, list[dict]]) -> dict:
@@ -150,7 +158,12 @@ def get_message(message_id: int) -> dict:
         return _get(db, message_id)
 
 
-def list_messages(room: str, limit: int = PAGE_LIMIT, before_id: int | None = None, after_id: int | None = None) -> list[dict]:
+def list_messages(
+    room: str,
+    limit: int = PAGE_LIMIT,
+    before_id: int | None = None,
+    after_id: int | None = None,
+) -> list[dict]:
     """Chronological page of a room. Default and before_id pages are the newest
     messages below the cursor; after_id pages are the oldest messages above it, so a
     reconnecting client can walk forward through everything it missed."""
@@ -165,7 +178,8 @@ def list_messages(room: str, limit: int = PAGE_LIMIT, before_id: int | None = No
     order = "ASC" if after_id is not None and before_id is None else "DESC"
     with closing(connect()) as db:
         rows = db.execute(
-            MESSAGE_SELECT + f"WHERE {' AND '.join(clauses)} ORDER BY m.id {order} LIMIT ?",
+            MESSAGE_SELECT
+            + f"WHERE {' AND '.join(clauses)} ORDER BY m.id {order} LIMIT ?",
             (*params, limit),
         ).fetchall()
         if order == "DESC":
@@ -176,13 +190,19 @@ def list_messages(room: str, limit: int = PAGE_LIMIT, before_id: int | None = No
 def recent_for_ai(room: str, limit: int = PAGE_LIMIT) -> list[dict]:
     """Recent visible messages in the stable v1 Message shape the AI service expects."""
     keys = ("id", "room", "user", "text", "created_at")
-    return [{k: m[k] for k in keys} for m in list_messages(room, limit) if not m["deleted"]]
+    return [
+        {k: m[k] for k in keys} for m in list_messages(room, limit) if not m["deleted"]
+    ]
 
 
-def create_message(room: str, user: str, text: str, reply_to: int | None = None) -> dict:
+def create_message(
+    room: str, user: str, text: str, reply_to: int | None = None
+) -> dict:
     with closing(connect()) as db:
         if reply_to is not None:
-            parent = db.execute("SELECT room FROM messages WHERE id = ?", (reply_to,)).fetchone()
+            parent = db.execute(
+                "SELECT room FROM messages WHERE id = ?", (reply_to,)
+            ).fetchone()
             if parent is None or parent["room"] != room:
                 raise Invalid("The message you replied to is not in this room")
         with db:
@@ -193,8 +213,12 @@ def create_message(room: str, user: str, text: str, reply_to: int | None = None)
         return _get(db, cur.lastrowid)
 
 
-def _own_live_message(db: sqlite3.Connection, message_id: int, user: str) -> sqlite3.Row:
-    row = db.execute("SELECT user, deleted_at FROM messages WHERE id = ?", (message_id,)).fetchone()
+def _own_live_message(
+    db: sqlite3.Connection, message_id: int, user: str
+) -> sqlite3.Row:
+    row = db.execute(
+        "SELECT user, deleted_at FROM messages WHERE id = ?", (message_id,)
+    ).fetchone()
     if row is None:
         raise NotFound("Message not found")
     if row["deleted_at"] is not None:
@@ -208,7 +232,10 @@ def edit_message(message_id: int, user: str, text: str) -> dict:
     with closing(connect()) as db:
         _own_live_message(db, message_id, user)
         with db:
-            db.execute("UPDATE messages SET text = ?, edited_at = ? WHERE id = ?", (text, now(), message_id))
+            db.execute(
+                "UPDATE messages SET text = ?, edited_at = ? WHERE id = ?",
+                (text, now(), message_id),
+            )
         return _get(db, message_id)
 
 
@@ -216,21 +243,26 @@ def delete_message(message_id: int, user: str) -> dict:
     with closing(connect()) as db:
         _own_live_message(db, message_id, user)
         with db:
-            db.execute("UPDATE messages SET deleted_at = ? WHERE id = ?", (now(), message_id))
+            db.execute(
+                "UPDATE messages SET deleted_at = ? WHERE id = ?", (now(), message_id)
+            )
             db.execute("DELETE FROM reactions WHERE message_id = ?", (message_id,))
         return _get(db, message_id)
 
 
 def toggle_reaction(message_id: int, user: str, emoji: str) -> dict:
     with closing(connect()) as db:
-        row = db.execute("SELECT deleted_at FROM messages WHERE id = ?", (message_id,)).fetchone()
+        row = db.execute(
+            "SELECT deleted_at FROM messages WHERE id = ?", (message_id,)
+        ).fetchone()
         if row is None:
             raise NotFound("Message not found")
         if row["deleted_at"] is not None:
             raise Conflict("This message was deleted")
         with db:
             removed = db.execute(
-                "DELETE FROM reactions WHERE message_id = ? AND user = ? AND emoji = ?", (message_id, user, emoji)
+                "DELETE FROM reactions WHERE message_id = ? AND user = ? AND emoji = ?",
+                (message_id, user, emoji),
             ).rowcount
             if not removed:
                 db.execute(
@@ -242,6 +274,7 @@ def toggle_reaction(message_id: int, user: str, emoji: str) -> dict:
 
 # ---------------------------------------------------------------- rooms
 
+
 def _slug(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40].strip("-")
     return slug or "room"
@@ -249,11 +282,19 @@ def _slug(name: str) -> str:
 
 def _room(db: sqlite3.Connection, row: sqlite3.Row, user: str | None) -> dict:
     room_id = row["id"]
-    last = db.execute(MESSAGE_SELECT + "WHERE m.room = ? ORDER BY m.id DESC LIMIT 1", (room_id,)).fetchone()
+    last = db.execute(
+        MESSAGE_SELECT + "WHERE m.room = ? ORDER BY m.id DESC LIMIT 1", (room_id,)
+    ).fetchone()
     count = db.execute(
-        "SELECT COUNT(*) FROM messages WHERE room = ? AND deleted_at IS NULL", (room_id,)
+        "SELECT COUNT(*) FROM messages WHERE room = ? AND deleted_at IS NULL",
+        (room_id,),
     ).fetchone()[0]
-    reads = {r["user"]: r["message_id"] for r in db.execute("SELECT user, message_id FROM reads WHERE room = ?", (room_id,))}
+    reads = {
+        r["user"]: r["message_id"]
+        for r in db.execute(
+            "SELECT user, message_id FROM reads WHERE room = ?", (room_id,)
+        )
+    }
     unread = 0
     if user:
         unread = db.execute(
@@ -276,13 +317,20 @@ def list_rooms(user: str | None = None) -> list[dict]:
     """Rooms with their latest message, most recently active first."""
     with closing(connect()) as db:
         rooms = [_room(db, row, user) for row in db.execute("SELECT * FROM rooms")]
-    return sorted(rooms, key=lambda r: (r["last_message"] or r)["created_at"], reverse=True)
+    return sorted(
+        rooms, key=lambda r: (r["last_message"] or r)["created_at"], reverse=True
+    )
 
 
 def create_room(name: str, created_by: str | None = None) -> dict:
     with closing(connect()) as db:
         base = _slug(name)
-        taken = {r[0] for r in db.execute("SELECT id FROM rooms WHERE id = ? OR id LIKE ?", (base, base + "-%"))}
+        taken = {
+            r[0]
+            for r in db.execute(
+                "SELECT id FROM rooms WHERE id = ? OR id LIKE ?", (base, base + "-%")
+            )
+        }
         room_id, n = base, 2
         while room_id in taken:
             room_id, n = f"{base}-{n}", n + 1
@@ -291,15 +339,26 @@ def create_room(name: str, created_by: str | None = None) -> dict:
                 "INSERT INTO rooms(id, name, created_by, created_at) VALUES (?, ?, ?, ?)",
                 (room_id, name, created_by, now()),
             )
-        return _room(db, db.execute("SELECT * FROM rooms WHERE id = ?", (room_id,)).fetchone(), created_by)
+        return _room(
+            db,
+            db.execute("SELECT * FROM rooms WHERE id = ?", (room_id,)).fetchone(),
+            created_by,
+        )
 
 
 def mark_read(room: str, user: str, message_id: int) -> tuple[int, bool]:
     """Move a user's read position forward (never back). Returns the position and
     whether it moved."""
     with closing(connect()) as db:
-        latest = db.execute("SELECT MAX(id) FROM messages WHERE room = ?", (room,)).fetchone()[0] or 0
-        before = db.execute("SELECT message_id FROM reads WHERE room = ? AND user = ?", (room, user)).fetchone()
+        latest = (
+            db.execute(
+                "SELECT MAX(id) FROM messages WHERE room = ?", (room,)
+            ).fetchone()[0]
+            or 0
+        )
+        before = db.execute(
+            "SELECT message_id FROM reads WHERE room = ? AND user = ?", (room, user)
+        ).fetchone()
         with db:
             db.execute(
                 """INSERT INTO reads(room, user, message_id, updated_at) VALUES (?, ?, ?, ?)
@@ -307,15 +366,23 @@ def mark_read(room: str, user: str, message_id: int) -> tuple[int, bool]:
                    updated_at = excluded.updated_at""",
                 (room, user, min(message_id, latest), now()),
             )
-        position = db.execute("SELECT message_id FROM reads WHERE room = ? AND user = ?", (room, user)).fetchone()[0]
+        position = db.execute(
+            "SELECT message_id FROM reads WHERE room = ? AND user = ?", (room, user)
+        ).fetchone()[0]
         return position, before is None or position != before[0]
 
 
 # ---------------------------------------------------------------- polls
 
+
 def _poll(db: sqlite3.Connection, row: sqlite3.Row) -> dict:
     options = json.loads(row["options"])
-    votes = {r["user"]: r["option_index"] for r in db.execute("SELECT user, option_index FROM votes WHERE poll_id = ?", (row["id"],))}
+    votes = {
+        r["user"]: r["option_index"]
+        for r in db.execute(
+            "SELECT user, option_index FROM votes WHERE poll_id = ?", (row["id"],)
+        )
+    }
     counts = [0] * len(options)
     for index in votes.values():
         if 0 <= index < len(counts):
@@ -337,18 +404,25 @@ def list_polls(room: str | None = None) -> list[dict]:
         if room is None:
             rows = db.execute("SELECT * FROM polls ORDER BY id DESC").fetchall()
         else:
-            rows = db.execute("SELECT * FROM polls WHERE room = ? ORDER BY id DESC", (room,)).fetchall()
+            rows = db.execute(
+                "SELECT * FROM polls WHERE room = ? ORDER BY id DESC", (room,)
+            ).fetchall()
         return [_poll(db, r) for r in rows]
 
 
-def create_poll(question: str, options: list[str], room: str, created_by: str | None) -> dict:
+def create_poll(
+    question: str, options: list[str], room: str, created_by: str | None
+) -> dict:
     with closing(connect()) as db:
         with db:
             cur = db.execute(
                 "INSERT INTO polls(question, options, room, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
                 (question, json.dumps(options), room, created_by, now()),
             )
-        return _poll(db, db.execute("SELECT * FROM polls WHERE id = ?", (cur.lastrowid,)).fetchone())
+        return _poll(
+            db,
+            db.execute("SELECT * FROM polls WHERE id = ?", (cur.lastrowid,)).fetchone(),
+        )
 
 
 def vote(poll_id: int, user: str, option_index: int) -> dict:
