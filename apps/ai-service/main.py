@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from openai import AsyncOpenAI
 
 app = FastAPI(title="ChatAI Intelligence")
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY", "missing"))
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY") or "missing")
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 class Conversation(BaseModel):
