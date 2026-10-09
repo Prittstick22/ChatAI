@@ -1,0 +1,20 @@
+services:
+  ai:
+    build: ./apps/ai-service
+    env_file: .env
+    ports: ["8001:8001"]
+  chat:
+    build: ./apps/chat-api
+    environment:
+      DB_PATH: /data/chat.db
+      AI_URL: http://ai:8001
+      CORS_ORIGINS: http://localhost:5173
+    volumes: ["chatdata:/data"]
+    ports: ["8000:8000"]
+    depends_on: [ai]
+  web:
+    build: ./apps/web
+    ports: ["5173:5173"]
+    depends_on: [chat]
+volumes:
+  chatdata:
