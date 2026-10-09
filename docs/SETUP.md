@@ -6,7 +6,7 @@
 - [uv](https://docs.astral.sh/uv/) and Node.js 20+ with npm for non-Docker work. uv installs the right Python (3.11, from each service's `.python-version`) by itself.
   - macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh` (or `brew install uv`)
   - Windows: `winget install --id=astral-sh.uv -e`
-- Editor: VS Code, with Python, Pylance, ESLint and Prettier extensions
+- Editor: VS Code, with Python, Pylance, ESLint and Prettier extensions. Open `ChatAI.code-workspace` (File → Open Workspace from File), not the repo folder, so each Python service gets its own interpreter. Run `uv sync` once in `apps/chat-api` and `apps/ai-service` to create their `.venv`; if VS Code doesn't pick it, run **Python: Select Interpreter**, choose the service folder, then its `.venv`.
 - Optional: OpenAI API key, stored **only** in a local `.env`
 
 ## Windows 10/11 — PowerShell
