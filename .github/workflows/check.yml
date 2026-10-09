@@ -7,10 +7,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: python -m compileall -q apps/chat-api apps/ai-service
+      - uses: astral-sh/setup-uv@v10
+      - run: |
+          for service in chat-api ai-service; do
+            uv sync --locked --directory apps/$service
+            uv run --directory apps/$service python -m compileall -q main.py
+          done
   frontend-build:
     runs-on: ubuntu-latest
     defaults:

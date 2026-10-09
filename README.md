@@ -5,7 +5,7 @@
 A real-time group messenger designed to automatically turn noisy conversations into summaries, semantic search results, polls and calendar suggestions.
 
 ## Quick start
-1. Install Git, Docker Desktop, Node.js 20+ and Python 3.11+.
+1. Install Git, Docker Desktop, Node.js 20+ and [uv](https://docs.astral.sh/uv/) (it installs Python for you).
 2. Clone: `git clone https://github.com/Prittstick22/ChatAI.git`
 3. Go into `ChatAI`; copy `.env.example` to `.env` (PowerShell: `Copy-Item .env.example .env`).
 4. Set `OPENAI_API_KEY` in `.env` (optional for fallback).

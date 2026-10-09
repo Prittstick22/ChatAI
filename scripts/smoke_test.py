@@ -1,4 +1,8 @@
-"""Run against a started ChatAI stack: python scripts/smoke_test.py"""
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+"""Run against a started ChatAI stack: uv run scripts/smoke_test.py"""
 import json
 import os
 import sys
