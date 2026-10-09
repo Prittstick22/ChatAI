@@ -4,7 +4,7 @@ import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChatApp } from './chat/ChatApp';
 import { IdentityGate } from './chat/IdentityGate';
-import { saveIdentity, savedIdentity } from './chat/people';
+import { colorFor, saveIdentity, savedIdentity } from './chat/people';
 import type { ChatSlots } from './chat/slots';
 import { InsightsPanel } from './defaults/InsightsPanel';
 import { NudgeCard } from './defaults/NudgeCard';
@@ -21,7 +21,12 @@ const slots: ChatSlots = {
 };
 
 function App() {
-  const [me, setMe] = useState(savedIdentity);
+  const [me, setMe] = useState(() => {
+    const saved = savedIdentity();
+    // Set the accent before the first paint so a reload doesn't fade in from blue.
+    if (saved) document.documentElement.style.setProperty('--accent', colorFor(saved));
+    return saved;
+  });
 
   const choose = (name: string) => {
     saveIdentity(name);

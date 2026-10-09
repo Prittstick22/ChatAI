@@ -50,7 +50,9 @@ export function MessageList(props: Props) {
   const openedAt = useMemo(() => Date.now(), [room.id]);
 
   const items = useMemo(() => {
-    const firstUnread = unreadAfter === null ? -1 : messages.findIndex((m) => m.id > unreadAfter && m.user !== me && !m.deleted);
+    let firstUnread = unreadAfter === null ? -1 : messages.findIndex((m) => m.id > unreadAfter && m.user !== me && !m.deleted);
+    // If the first loaded message is already unread, the real start is further back.
+    if (firstUnread === 0 && history?.hasOlder && (messages[0]?.id ?? 0) - 1 > (unreadAfter ?? 0)) firstUnread = -1;
     const out: Item[] = [];
     messages.forEach((m, i) => {
       const prev = messages[i - 1];
@@ -66,7 +68,7 @@ export function MessageList(props: Props) {
     });
     inserts.get('end')?.forEach((node, n) => out.push({ kind: 'insert', key: `insert-end-${n}`, node }));
     return out;
-  }, [messages, unreadAfter, me, inserts]);
+  }, [messages, unreadAfter, me, inserts, history?.hasOlder]);
 
   // Each reader's avatar sits under the latest loaded message they've read, unless it's their own.
   const seenBy = useMemo(() => {
@@ -90,6 +92,7 @@ export function MessageList(props: Props) {
   const measure = useCallback(() => {
     const el = scroller.current;
     if (!el) return;
+    setSelected(null);
     const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < PIN_GAP;
     pinned.current = bottom;
     setAtBottom(bottom);
@@ -186,6 +189,9 @@ export function MessageList(props: Props) {
     if (!el) return;
     pinned.current = true;
     setUnseen(0);
+    // From far back, skip most of the way so the glide stays short.
+    const far = el.scrollHeight - el.clientHeight * 2.5;
+    if (el.scrollTop < far) el.scrollTop = far;
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   };
 
