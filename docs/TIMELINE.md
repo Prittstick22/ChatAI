@@ -2,13 +2,30 @@
 
 **Submission deadline: 16:00.** Work backwards from recording and upload time. **Hard feature freeze 14:15.** Every milestone has a visible proof, not just merged code.
 
-## Team assignments (8 tickets each)
-- **nm-04** — core messaging: #1 #2 #3 #4 #15 #16 #23 #32. Owns `apps/chat-api/` plus the core chat UI.
-- **Jin** — AI intelligence: #8 #9 #10 #11 #12 #13 #14 #33. Owns `apps/ai-service/`.
-- **Vera** — actions/features: #5 #6 #7 #17 #18 #19 #20 #22. Owns `apps/web/src/features/`; coordinate API changes with nm-04 and AI response shapes with Jin.
-- **Dev / Prittstick22** — integration, test, story and submission: #24 #25 #26 #27 #28 #29 #30 #31. Owns `docs/`, `scripts/`, releases, review and demo.
+## Updated team ownership — distributed admin + engineering
 
-Equal ticket count does not imply equal effort: nm-04 has the heavier foundational vertical slice. Dev helps integration and debugging early. Drop P2 work first.
+- **Naweed / nm-04 (9 issues):** #1 #2 #3 #4 #15 #16 #23 #32 (core messaging) plus #31 (architecture and privacy notes). **Own** `apps/chat-api/`, core `apps/web/src/main.tsx`, `docs/ARCHITECTURE.md`.
+- **Jin / JCYuhei (9 issues):** #8 #9 #10 #11 #12 #13 #14 #33 (AI development) plus #28 (technical pitch/storyboard). **Own** `apps/ai-service/`, `docs/DEMO.md` draft.
+- **Vera / vmalkova (9 issues):** #5 #6 #7 #17 #18 #19 #20 #22 (actions UI/integration) plus #29 (record the 3-minute video and verify file). **Own** `apps/web/src/features/` and demo media assets; negotiate needed chat endpoints with Naweed.
+- **Dev / Prittstick22 (8 issues):** #24 #25 #26 #27 #30 (API contract, system smoke/E2E, seed data oversight and submission), **plus new engineering #34 #35 #36** (automated API integration tests, reproducible fixture seeding CLI, GitHub Actions). **Own** `tests/`, `scripts/`, `fixtures/`, `.github/workflows/`, `docs/API_CONTRACT.md`, `docs/TIMELINE.md`.
+
+**This is fair by workstream, not just ticket totals.** Naweed's messaging platform remains a critical path. No teammate waits for another's implementation: AI works against JSON fixtures; UI actions use typed mock data until chat API is ready; Dev tests against published contracts. Help across boundaries through PR review, not simultaneous edits.
+
+### Admin duties shared
+| Duty | Owner | Backup |
+|---|---|---|
+| Architecture / technical depth slides | Naweed | Dev |
+| AI explanation and presentation script | Jin | Dev |
+| Recording, exporting and playback check | Vera | Jin |
+| API contract, check-ins, final integration and Devpost submission | Dev | Vera |
+| Running own feature's tests and filing blockers | Every developer | Dev |
+
+### Merge-collision controls
+1. At 09:45 freeze endpoint payload shapes in `docs/API_CONTRACT.md`. Contract changes require Dev's approval.
+2. **One file, one primary owner**: Naweed owns `apps/web/src/main.tsx`; Vera puts components in `apps/web/src/features/` and sends Naweed a small import contract. Jin owns the AI service. Dev owns test and CI directories.
+3. Avoid editing the same source file on separate branches. Prefer dependency PRs: first API contract, then backend endpoints, then component integration.
+4. Small PRs merged in sequence after CI; one person reviews every PR. Rebase before merging. After 14:15 allow only critical fixes.
+5. Every 30-minute check-in: done (PR + demonstrated result), next, blocker, risk (green/amber/red).
 
 ## Milestones, checkpoints and acceptance criteria
 
