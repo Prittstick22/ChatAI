@@ -60,6 +60,7 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
   const atBottom = useRef(true);
   const lastMarked = useRef<Record<string, number>>({});
   const optimisticSeq = useRef(0);
+  const summariesFetched = useRef(new Set<string>());
   const live = useRef({ me, activeRoom, state });
   live.current = { me, activeRoom, state };
 
@@ -89,6 +90,13 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
     } catch (e) {
       dispatch({ type: 'rooms/failed', error: errorText(e) });
     }
+  }, []);
+
+  const loadSummary = useCallback((room: string) => {
+    chatApi.summary(room).then(
+      ({ summary }) => summary && dispatch({ type: 'summary', room, summary }),
+      () => {},
+    );
   }, []);
 
   const loadHistory = useCallback(async (room: string) => {
@@ -127,10 +135,23 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
   }, [state.roomsStatus, roomList, activeRoom, state.rooms, openRoomHash]);
 
   const room = activeRoom ? state.rooms[activeRoom] : undefined;
+  const summary = room ? state.summaries[room.id] : undefined;
+  // room -> created_at of the newest summary seen in the catch-up tab, for the dot.
+  const [summarySeen, setSummarySeen] = useState<Record<string, string>>({});
+  const newSummary = Boolean(summary && insights !== 'catchup' && summarySeen[summary.room] !== summary.created_at);
+  useEffect(() => {
+    if (summary && insights === 'catchup') setSummarySeen((seen) => ({ ...seen, [summary.room]: summary.created_at }));
+  }, [summary, insights]);
 
   useEffect(() => {
     if (room && !state.history[room.id]) loadHistory(room.id);
   }, [room, state.history, loadHistory]);
+
+  useEffect(() => {
+    if (!room || summariesFetched.current.has(room.id)) return;
+    summariesFetched.current.add(room.id);
+    loadSummary(room.id);
+  }, [room, loadSummary]);
 
   // Remember where unread messages started when the room is opened, for the divider.
   useEffect(() => {
@@ -233,6 +254,9 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
       case 'nudge':
         dispatch({ type: 'nudge', room: event.room, nudge: event.nudge });
         break;
+      case 'summary':
+        dispatch({ type: 'summary', room: event.room, summary: event.summary });
+        break;
     }
   }, []);
 
@@ -247,7 +271,8 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
     for (const list of Object.values(s.messages)) {
       for (const m of list) if (m.status === 'failed' && m.user === live.current.me) deliver(m);
     }
-  }, [loadRooms, deliver]);
+    for (const id of summariesFetched.current) loadSummary(id);
+  }, [loadRooms, deliver, loadSummary]);
 
   const { status, send } = useChatSocket(me, onEvent, onOpen);
 
@@ -415,8 +440,11 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
 
   const CatchUp = slots.catchUp;
   const renderCatchUp = useMemo(
-    () => (CatchUp && room ? (unread: ChatMessage[]) => <CatchUp room={room} me={me} api={chatApi} unread={unread} /> : undefined),
-    [CatchUp, room, me],
+    () =>
+      CatchUp && room
+        ? (unread: ChatMessage[]) => <CatchUp room={room} me={me} api={chatApi} unread={unread} summary={summary} />
+        : undefined,
+    [CatchUp, room, me, summary],
   );
 
   const ComposerSlot = slots.composer;
@@ -492,11 +520,23 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
                   <button
                     type="button"
                     className={insights && insights !== 'search' ? 'icon-button pressed' : 'icon-button'}
-                    aria-label="Insights panel"
+                    aria-label={newSummary ? 'Insights panel, new summary' : 'Insights panel'}
                     aria-pressed={Boolean(insights && insights !== 'search')}
                     onClick={() => setInsights((t) => (t && t !== 'search' ? null : 'catchup'))}
                   >
                     <SidebarSimpleIcon size={20} mirrored />
+                    <AnimatePresence>
+                      {newSummary && (
+                        <motion.span
+                          key="dot"
+                          className="button-dot"
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0 }}
+                          transition={{ type: 'spring', stiffness: 600, damping: 22 }}
+                        />
+                      )}
+                    </AnimatePresence>
                   </button>
                 </div>
               )}
@@ -551,7 +591,7 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
             className="panel"
             aria-label="Insights"
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 360, opacity: 1 }}
+            animate={{ width: 380, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 40 }}
           >
@@ -562,7 +602,17 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
                   <SidebarSimpleIcon size={18} mirrored />
                 </button>
               </div>
-              <Insights room={room} me={me} api={chatApi} messages={messages} tab={insights} onTab={setInsights} onJump={jumpTo} />
+              <Insights
+                room={room}
+                me={me}
+                api={chatApi}
+                messages={messages}
+                tab={insights}
+                onTab={setInsights}
+                onJump={jumpTo}
+                summary={summary}
+                previousSummary={state.previousSummaries[room.id]}
+              />
             </div>
           </motion.aside>
         )}

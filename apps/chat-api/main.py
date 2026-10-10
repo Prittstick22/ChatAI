@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 import nudges
 import store
+import summaries
 from realtime import Client, Hub
 
 AI_URL = os.getenv("AI_URL", "http://localhost:8001")
@@ -66,6 +67,7 @@ async def lifespan(app: FastAPI):
         app.state.ai = client
         # Looked up on each call so tests can stub ai_call.
         app.state.nudger = nudges.Nudger(hub, lambda *args: ai_call(*args))
+        app.state.summariser = summaries.Summariser(hub, lambda *args: ai_call(*args))
         yield
     for task in list(background):
         task.cancel()
@@ -171,6 +173,12 @@ async def create_room(body: NewRoom):
     return room
 
 
+@app.get("/rooms/{room}/summary")
+def room_summary(room: str):
+    """The latest automatic summary (see summaries.py), or null before the first."""
+    return {"summary": app.state.summariser.latest.get(room)}
+
+
 @app.post("/rooms/{room}/read")
 async def mark_read(room: str, body: ReadIn):
     position, moved = store.mark_read(room, body.user, body.message_id)
@@ -202,6 +210,7 @@ async def post_message(m: NewMessage):
         message["client_id"] = m.client_id
     await hub.broadcast({"type": "message", "message": message}, room=m.room)
     run_in_background(app.state.nudger.after_message(message))
+    run_in_background(app.state.summariser.after_message(message))
     return message
 
 
@@ -237,7 +246,8 @@ async def react(message_id: int, body: ReactionIn):
 @app.websocket("/ws")
 async def ws_events(ws: WebSocket, user: str | None = None, room: str | None = None):
     """Server events: message, message_updated, typing, presence, read, room, poll,
-    pong and nudge (AI proposals, see nudges.py). Client events: typing, ping."""
+    pong, nudge (AI proposals, nudges.py) and summary (summaries.py). Client events:
+    typing, ping."""
     await ws.accept()
     client = Client(ws, clean_user(user), room or None)
     await hub.join(client)
@@ -289,12 +299,14 @@ async def ai_call(path: str, payload: dict, fallback: dict):
 
 @app.get("/digest")
 async def digest(room: str = store.DEFAULT_ROOM):
-    history = store.recent_for_ai(room)
-    return await ai_call(
-        "/digest",
-        {"messages": history},
-        {"summary": "AI temporarily unavailable; chat remains operational."},
-    )
+    """Summarise now. The result becomes the room's latest summary and is pushed to
+    everyone in it, like the automatic ones (summaries.py)."""
+    if not store.recent_for_ai(room):
+        return {"summary": "No messages to summarise yet."}
+    summary = await app.state.summariser.summarise_now(room)
+    if summary is None:
+        return {"summary": "AI temporarily unavailable; chat remains operational."}
+    return {**summary, "summary": summary["text"]}
 
 
 @app.get("/search")

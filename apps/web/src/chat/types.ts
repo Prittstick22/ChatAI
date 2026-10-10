@@ -67,6 +67,30 @@ export type Proposal = {
   timezone?: string;
 };
 
+/** One line of a structured summary, with the messages it came from. */
+export type SummaryItem = { text: string; source_message_ids: number[] };
+export type SummaryTopic = { title: string; points: string[]; source_message_ids: number[] };
+export type SummaryAction = SummaryItem & { owner: string | null };
+
+/** Catch-up summary from the chat API (summaries.py): made after 10 new messages, a
+ * quiet spell or "Summarise now", and pushed as a `summary` event. Text fields may
+ * contain **bold** for times and dates. */
+export type Summary = {
+  room: string;
+  /** Plain-text version; the only content when the AI returned no structure. */
+  text: string;
+  headline?: string | null;
+  topics?: SummaryTopic[];
+  decisions?: SummaryItem[];
+  actions?: SummaryAction[];
+  questions?: SummaryItem[];
+  /** The newest message the summary covers. */
+  upto_message_id: number;
+  message_count: number;
+  trigger: 'messages' | 'quiet' | 'manual' | string;
+  created_at: string;
+};
+
 export type ServerEvent =
   | { type: 'message'; message: Message }
   | { type: 'message_updated'; message: Message }
@@ -76,6 +100,7 @@ export type ServerEvent =
   | { type: 'room'; room: Room }
   | { type: 'poll'; poll: Poll }
   | { type: 'nudge'; room: string; nudge: Proposal }
+  | { type: 'summary'; room: string; summary: Summary }
   | { type: 'pong' };
 
 /** A message as the UI holds it: server data plus local delivery state. */
