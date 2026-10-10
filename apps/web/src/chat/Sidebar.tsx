@@ -73,7 +73,7 @@ export function Sidebar({ me, rooms, activeRoom, collapsed, online, typing, onOp
     <nav className={collapsed ? 'sidebar sidebar-collapsed' : 'sidebar'} aria-label="Rooms">
       <div className="sidebar-top">
         <div className="sidebar-brand-row">
-          <span className="wordmark">H.AI</span>
+          <img className="wordmark" src="/brand/hai-logo.png" alt="H.AI" />
           <button
             type="button"
             className="icon-button sidebar-collapse"

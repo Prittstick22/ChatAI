@@ -11,6 +11,7 @@ export function IdentityGate({ onPick }: { onPick: (name: string) => void }) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 260, damping: 28 }}
       >
+        <img className="gate-logo" src="/brand/hai-logo.png" alt="H.AI" />
         <h1>Who's chatting?</h1>
         <p>Pick a demo person. There's no sign-in, so open a private window to chat as someone else at the same time.</p>
         <div className="gate-people">
