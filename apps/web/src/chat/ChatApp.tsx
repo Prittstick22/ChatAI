@@ -359,8 +359,8 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
     setShowChat(true);
   };
 
-  const createRoom = async (name: string) => {
-    const created = await chatApi.createRoom(name, me);
+  const createRoom = async (name: string, members: string[]) => {
+    const created = await chatApi.createRoom({ name, created_by: me, members });
     dispatch({ type: 'room/upsert', room: created });
     openRoom(created.id);
   };

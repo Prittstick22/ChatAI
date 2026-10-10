@@ -1,10 +1,11 @@
 import { CaretUpDownIcon, CheckIcon, PlusIcon, XIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Avatar, RoomBadge } from './Avatar';
 import { listNames, listTime, preview } from './format';
 import { PEOPLE } from './people';
 import type { Room } from './types';
+import { NewGroupChat } from '../features/NewGroupChat';
 
 type Props = {
   me: string;
@@ -13,7 +14,7 @@ type Props = {
   online: string[];
   typing: Record<string, Record<string, number>>;
   onOpen: (room: string) => void;
-  onCreate: (name: string) => Promise<void>;
+  onCreate: (name: string, members: string[]) => Promise<void>;
   onSwitchIdentity: (name: string) => void;
 };
 
@@ -29,11 +30,13 @@ function lastLine(room: Room, me: string, typing: string[]): { text: string; typ
 
 export function Sidebar({ me, rooms, activeRoom, online, typing, onOpen, onCreate, onSwitchIdentity }: Props) {
   const [creating, setCreating] = useState(false);
-  const [name, setName] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const contacts = [...new Set([
+    ...PEOPLE.map((person) => person.name),
+    ...online,
+    ...rooms.flatMap((room) => [...(room.members ?? []), room.created_by ?? '', room.last_message?.user ?? '']),
+  ].filter(Boolean))];
 
   useEffect(() => {
     if (!menu) return;
@@ -49,22 +52,6 @@ export function Sidebar({ me, rooms, activeRoom, online, typing, onOpen, onCreat
     };
   }, [menu]);
 
-  const create = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      await onCreate(name.trim());
-      setName('');
-      setCreating(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't create the room.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <nav className="sidebar" aria-label="Rooms">
       <div className="sidebar-top">
@@ -72,11 +59,10 @@ export function Sidebar({ me, rooms, activeRoom, online, typing, onOpen, onCreat
         <button
           type="button"
           className={creating ? 'icon-button pressed' : 'icon-button'}
-          aria-label={creating ? 'Cancel new room' : 'New room'}
+          aria-label={creating ? 'Cancel new group' : 'New group'}
           aria-expanded={creating}
           onClick={() => {
             setCreating((c) => !c);
-            setError('');
           }}
         >
           <motion.span animate={{ rotate: creating ? 45 : 0 }} transition={spring} style={{ display: 'flex' }}>
@@ -87,33 +73,21 @@ export function Sidebar({ me, rooms, activeRoom, online, typing, onOpen, onCreat
 
       <AnimatePresence initial={false}>
         {creating && (
-          <motion.form
+          <motion.div
             className="new-room"
-            onSubmit={create}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={spring}
           >
-            <div className="new-room-inner">
-              <label htmlFor="new-room-name">New room</label>
-              <div className="new-room-row">
-                <input
-                  id="new-room-name"
-                  autoFocus
-                  value={name}
-                  maxLength={60}
-                  placeholder="e.g. Food run"
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Escape' && setCreating(false)}
-                />
-                <button type="submit" className="button" disabled={!name.trim() || busy}>
-                  Create
-                </button>
-              </div>
-              {error && <p className="field-error">{error}</p>}
-            </div>
-          </motion.form>
+            <NewGroupChat
+              me={me}
+              contacts={contacts}
+              online={online}
+              onCreate={onCreate}
+              onCancel={() => setCreating(false)}
+            />
+          </motion.div>
         )}
       </AnimatePresence>
 

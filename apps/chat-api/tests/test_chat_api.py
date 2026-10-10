@@ -211,6 +211,53 @@ def test_rooms_unread_and_read_positions(client):
     )
 
 
+def test_group_rooms_store_members_and_are_listed_only_for_them(client):
+    response = client.post(
+        "/rooms",
+        json={
+            "name": "Society planning",
+            "created_by": "Alex",
+            "members": ["Sam", "Taylor", "Sam"],
+        },
+    )
+    assert response.status_code == 201
+    created = response.json()
+    assert created["members"] == ["Alex", "Sam", "Taylor"]
+
+    alex_rooms = {room["id"]: room for room in client.get("/rooms?user=Alex").json()}
+    sam_rooms = {room["id"]: room for room in client.get("/rooms?user=Sam").json()}
+    jordan_rooms = {room["id"]: room for room in client.get("/rooms?user=Jordan").json()}
+    assert created["id"] in alex_rooms and created["id"] in sam_rooms
+    assert created["id"] not in jordan_rooms
+    assert alex_rooms[created["id"]]["members"] == created["members"]
+    assert "demo" in jordan_rooms, "legacy shared rooms remain available to everyone"
+
+
+def test_room_creation_without_members_keeps_legacy_visibility(client):
+    created = client.post(
+        "/rooms", json={"name": "Legacy room", "created_by": "Alex"}
+    ).json()
+    assert created["members"] == []
+    for user in ("Alex", "Sam", "Jordan", "Taylor"):
+        ids = {room["id"] for room in client.get(f"/rooms?user={user}").json()}
+        assert created["id"] in ids
+
+    assert (
+        client.post(
+            "/rooms",
+            json={"name": "Empty group", "created_by": "Alex", "members": []},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/rooms",
+            json={"name": "Just me", "created_by": "Alex", "members": ["Alex"]},
+        ).status_code
+        == 422
+    )
+
+
 def test_websocket_events(client):
     with client.websocket_connect("/ws?user=Sam&room=demo") as sam:
         assert receive(sam, "presence")["online"] == ["Sam"]

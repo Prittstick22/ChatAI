@@ -6,6 +6,8 @@
 `GET /health` → `{"status":"ok"}`
 `GET /messages?room=demo` → array of Message
 `POST /messages` JSON `{"user":"Alex","text":"We meet Saturday","room":"demo"}` → 201 Message
+`GET /rooms?user=Alex` → rooms visible to Alex
+`POST /rooms` JSON `{"name":"Food run","created_by":"Alex","members":["Sam"]}` → 201 Room
 `WS /ws` → `{"type":"message","message":Message}` after POST
 `GET /digest` → `{"summary":"..."}` (legacy)
 `GET /search?query=...` → `{"results":[Message],"mode":"semantic|keyword|keyword-fallback"}`
@@ -17,6 +19,17 @@
 {"id":1,"room":"demo","user":"Alex","text":"Meet Saturday at noon","created_at":"2026-10-10T09:45:00+00:00"}
 ```
 Stable id is integer; all clients deduplicate by id. Room defaults to `demo`. WS is currently global rather than room-filtered; use one room for MVP.
+
+### Room memberships
+
+`Room.members` is an additive array of demo identity names. When `members` is provided
+to `POST /rooms`, the creator is included automatically, duplicates are removed, and
+`GET /rooms?user=...` returns only rooms containing that identity. The submitted list
+must contain at least one person other than the creator and may contain up to 100 names.
+Older room creation requests that omit `members` remain shared with all demo identities,
+as do rooms already present before membership support. There is no account registry or
+authentication: the frontend uses the known demo identities and currently online or
+previously grouped identities as the selectable contact directory.
 
 ## Recommended AI service routes :8001
 `POST /digest` body `{"messages":[Message]}`; return `{"summary":"..."}` for compatibility. Optional new `topics` array is additive, not replacement.

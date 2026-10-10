@@ -132,6 +132,7 @@ class ReactionIn(BaseModel):
 class NewRoom(BaseModel):
     name: RoomName
     created_by: Name | None = None
+    members: list[Name] | None = Field(default=None, min_length=1, max_length=100)
 
 
 class ReadIn(BaseModel):
@@ -166,7 +167,11 @@ def rooms(user: str | None = None):
 
 @app.post("/rooms", status_code=201)
 async def create_room(body: NewRoom):
-    room = store.create_room(body.name, body.created_by)
+    if body.members is not None and not any(
+        member != body.created_by for member in body.members
+    ):
+        raise HTTPException(status_code=422, detail="Select at least one other person")
+    room = store.create_room(body.name, body.created_by, body.members)
     await hub.broadcast({"type": "room", "room": {**room, "unread": 0}})
     return room
 

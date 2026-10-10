@@ -59,6 +59,16 @@ MIGRATIONS = [
     END;
     INSERT INTO messages_fts(messages_fts) VALUES ('rebuild');
     """,
+    # 4: explicit participants for newly created private rooms. Rooms with no
+    # membership rows predate this feature and remain visible to every demo user.
+    """
+    CREATE TABLE room_members(
+        room TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+        user TEXT NOT NULL,
+        PRIMARY KEY(room, user)
+    );
+    CREATE INDEX room_members_user ON room_members(user, room);
+    """,
 ]
 
 
@@ -399,6 +409,13 @@ def _room(db: sqlite3.Connection, row: sqlite3.Row, user: str | None) -> dict:
         "name": row["name"],
         "created_by": row["created_by"],
         "created_at": row["created_at"],
+        "members": [
+            r["user"]
+            for r in db.execute(
+                "SELECT user FROM room_members WHERE room = ? ORDER BY rowid",
+                (room_id,),
+            )
+        ],
         "last_message": _hydrate(db, [last])[0] if last else None,
         "message_count": count,
         "unread": unread,
@@ -407,15 +424,33 @@ def _room(db: sqlite3.Connection, row: sqlite3.Row, user: str | None) -> dict:
 
 
 def list_rooms(user: str | None = None) -> list[dict]:
-    """Rooms with their latest message, most recently active first."""
+    """Rooms visible to the user, with their latest message first.
+
+    Rooms without membership rows are legacy shared rooms and stay visible to all
+    demo users for backward compatibility.
+    """
     with closing(connect()) as db:
-        rooms = [_room(db, row, user) for row in db.execute("SELECT * FROM rooms")]
+        query = "SELECT * FROM rooms"
+        params: tuple[str, ...] = ()
+        if user:
+            query += """
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM room_members rm WHERE rm.room = rooms.id
+                ) OR EXISTS (
+                    SELECT 1 FROM room_members rm
+                    WHERE rm.room = rooms.id AND rm.user = ?
+                )
+            """
+            params = (user,)
+        rooms = [_room(db, row, user) for row in db.execute(query, params)]
     return sorted(
         rooms, key=lambda r: (r["last_message"] or r)["created_at"], reverse=True
     )
 
 
-def create_room(name: str, created_by: str | None = None) -> dict:
+def create_room(
+    name: str, created_by: str | None = None, members: list[str] | None = None
+) -> dict:
     with closing(connect()) as db:
         base = _slug(name)
         taken = {
@@ -432,6 +467,16 @@ def create_room(name: str, created_by: str | None = None) -> dict:
                 "INSERT INTO rooms(id, name, created_by, created_at) VALUES (?, ?, ?, ?)",
                 (room_id, name, created_by, now()),
             )
+            if members is not None:
+                participants = list(
+                    dict.fromkeys(
+                        ([created_by] if created_by else []) + members
+                    )
+                )
+                db.executemany(
+                    "INSERT INTO room_members(room, user) VALUES (?, ?)",
+                    [(room_id, user) for user in participants],
+                )
         return _room(
             db,
             db.execute("SELECT * FROM rooms WHERE id = ?", (room_id,)).fetchone(),

@@ -120,6 +120,7 @@ export function reducer(state: State, action: Action): State {
     case 'rooms/failed':
       return state.roomsStatus === 'ready' ? state : { ...state, roomsStatus: 'error', roomsError: action.error };
     case 'room/upsert': {
+      if (action.room.members?.length && !action.room.members.includes(state.me)) return state;
       const existing = state.rooms[action.room.id];
       const room = existing ? { ...existing, ...action.room, unread: existing.unread } : action.room;
       return { ...state, rooms: { ...state.rooms, [room.id]: room } };

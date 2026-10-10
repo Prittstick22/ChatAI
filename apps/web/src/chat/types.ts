@@ -25,6 +25,7 @@ export type Room = {
   name: string;
   created_by: string | null;
   created_at: string;
+  members?: string[];
   last_message: Message | null;
   message_count: number;
   unread: number;

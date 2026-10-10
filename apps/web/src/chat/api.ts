@@ -56,10 +56,11 @@ function query(params: Record<string, string | number | null | undefined>): stri
 
 export type NewMessage = { room: string; user: string; text: string; reply_to?: number | null; client_id?: string };
 export type NewPoll = { question: string; options: string[]; room?: string; created_by?: string };
+export type NewRoom = { name: string; created_by: string; members: string[] };
 
 export const chatApi = {
   rooms: (user: string) => request<Room[]>('/rooms' + query({ user })),
-  createRoom: (name: string, createdBy: string) => request<Room>('/rooms', { method: 'POST', json: { name, created_by: createdBy } }),
+  createRoom: (room: NewRoom) => request<Room>('/rooms', { method: 'POST', json: room }),
   markRead: (room: string, user: string, messageId: number) =>
     request<{ room: string; user: string; message_id: number }>(`/rooms/${encodeURIComponent(room)}/read`, {
       method: 'POST',
