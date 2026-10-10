@@ -299,12 +299,14 @@ async def ai_call(path: str, payload: dict, fallback: dict):
 
 @app.get("/digest")
 async def digest(room: str = store.DEFAULT_ROOM):
-    history = store.recent_for_ai(room)
-    return await ai_call(
-        "/digest",
-        {"messages": history},
-        {"summary": "AI temporarily unavailable; chat remains operational."},
-    )
+    """Summarise now. The result becomes the room's latest summary and is pushed to
+    everyone in it, like the automatic ones (summaries.py)."""
+    if not store.recent_for_ai(room):
+        return {"summary": "No messages to summarise yet."}
+    summary = await app.state.summariser.summarise_now(room)
+    if summary is None:
+        return {"summary": "AI temporarily unavailable; chat remains operational."}
+    return {**summary, "summary": summary["text"]}
 
 
 @app.get("/search")

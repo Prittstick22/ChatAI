@@ -20,6 +20,8 @@ export type InsightsSlotProps = Base & {
   onJump: (messageId: number) => void;
   /** Latest automatic summary of the room, updated live; undefined before the first. */
   summary?: Summary;
+  /** The summary before `summary`, to show what changed. */
+  previousSummary?: Summary;
 };
 export type InsightsTab = 'catchup' | 'search' | 'actions';
 

@@ -4,7 +4,8 @@ import { CalendarPlusIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { InsightsSlotProps, InsightsTab } from '../chat/slots';
-import type { Poll, SearchResponse, SearchResult } from '../chat/types';
+import type { Poll, SearchResponse, SearchResult, Summary } from '../chat/types';
+import { SummarySkeleton, SummaryView, type SummaryTab } from './SummaryView';
 
 const TABS: { id: InsightsTab; label: string }[] = [
   { id: 'catchup', label: 'Catch up' },
@@ -16,55 +17,62 @@ type Async<T> = { state: 'idle' } | { state: 'busy' } | { state: 'done'; value: 
 
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.');
 
-const clock = (at: string | number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function CatchUp({ room, api, summary, previousSummary, onJump }: InsightsSlotProps) {
+  // Summaries arrive on their own (after 10 messages or a quiet spell); Summarise now
+  // asks for one, which the chat API also pushes to everyone in the room.
+  const [manual, setManual] = useState<Summary | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const [section, setSection] = useState<{ tab: SummaryTab; direction: number }>({ tab: 'overview', direction: 0 });
+  useEffect(() => {
+    setManual(null);
+    setNote('');
+  }, [room.id]);
 
-function CatchUp({ room, api, summary }: InsightsSlotProps) {
-  // The chat API pushes a summary after 10 new messages or a quiet spell; "Summarise
-  // now" asks for one on demand. Whichever is newer is shown.
-  const [manual, setManual] = useState<Async<{ text: string; at: number }>>({ state: 'idle' });
-  useEffect(() => setManual({ state: 'idle' }), [room.id]);
   const run = async () => {
-    setManual({ state: 'busy' });
+    setBusy(true);
+    setNote('');
     try {
-      setManual({ state: 'done', value: { text: (await api.digest(room.id)).summary, at: Date.now() } });
+      const result = await api.digest(room.id);
+      if (result.created_at) setManual({ ...(result as unknown as Summary), text: result.summary });
+      else setNote(result.summary);
     } catch (e) {
-      setManual({ state: 'error', error: message(e) });
+      setNote(message(e));
+    } finally {
+      setBusy(false);
     }
   };
-  const pushedAt = summary ? Date.parse(summary.created_at) : 0;
-  const showManual = manual.state === 'done' && manual.value.at > pushedAt;
-  const text = showManual ? manual.value.text : summary?.text;
-  const note = showManual
-    ? `Summarised at ${clock(manual.value.at)}`
-    : summary
-      ? `Updated at ${clock(summary.created_at)}, ${summary.trigger === 'quiet' ? 'when the chat went quiet' : 'after 10 new messages'}`
-      : null;
+  const order = ['overview', 'decisions', 'actions', 'questions'];
+  const onTab = (tab: SummaryTab) =>
+    setSection((s) => ({ tab, direction: Math.sign(order.indexOf(tab) - order.indexOf(s.tab)) }));
+  const current =
+    manual && (!summary || Date.parse(manual.created_at) > Date.parse(summary.created_at)) ? manual : summary;
 
   return (
     <section className="panel-section">
-      {text ? (
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={showManual ? `manual-${manual.state === 'done' && manual.value.at}` : summary?.created_at}
-            className="summary"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.22 }}
-          >
-            <p className="panel-note">{note}</p>
-            <p className="panel-result">{text}</p>
-          </motion.div>
-        </AnimatePresence>
+      {current ? (
+        <SummaryView
+          summary={current}
+          previous={current === summary ? previousSummary : summary}
+          tab={section.tab}
+          direction={section.direction}
+          onTab={onTab}
+          busy={busy}
+          onRefresh={run}
+          onJump={onJump}
+        />
+      ) : busy ? (
+        <SummarySkeleton />
       ) : (
-        <p className="panel-lede">
-          A summary of {room.name} appears here on its own after a burst of messages, or when the chat goes quiet.
-        </p>
+        <div className="digest-empty">
+          <p className="digest-empty-title">Nothing to catch up on yet</p>
+          <p className="panel-lede">A summary of {room.name} appears here after every 10 messages, or when the chat goes quiet.</p>
+          <button type="button" className="button secondary" onClick={run}>
+            Summarise now
+          </button>
+        </div>
       )}
-      <button type="button" className="button secondary" onClick={run} disabled={manual.state === 'busy'}>
-        {manual.state === 'busy' ? 'Summarising…' : 'Summarise now'}
-      </button>
-      {manual.state === 'error' && <p className="field-error">{manual.error}</p>}
+      {note && <p className="field-error">{note}</p>}
     </section>
   );
 }

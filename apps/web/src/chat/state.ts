@@ -22,6 +22,8 @@ export type State = {
   nudges: Record<string, Proposal[]>;
   /** room -> latest automatic summary */
   summaries: Record<string, Summary>;
+  /** room -> the summary before it, to show what changed */
+  previousSummaries: Record<string, Summary>;
 };
 
 export const PAGE = 100;
@@ -61,6 +63,7 @@ export const initialState = (me: string): State => ({
   online: [],
   nudges: {},
   summaries: {},
+  previousSummaries: {},
 });
 
 /** Confirmed messages in id order, then this tab's unsent ones in the order typed. */
@@ -269,7 +272,11 @@ export function reducer(state: State, action: Action): State {
       // A fetch can land after a newer pushed summary; keep whichever is newer.
       const current = state.summaries[action.room];
       if (current && Date.parse(current.created_at) >= Date.parse(action.summary.created_at)) return state;
-      return { ...state, summaries: { ...state.summaries, [action.room]: action.summary } };
+      return {
+        ...state,
+        summaries: { ...state.summaries, [action.room]: action.summary },
+        previousSummaries: current ? { ...state.previousSummaries, [action.room]: current } : state.previousSummaries,
+      };
     }
   }
 }

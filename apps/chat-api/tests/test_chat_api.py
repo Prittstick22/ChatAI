@@ -517,6 +517,38 @@ def test_ten_message_summary_isnt_repeated_when_the_room_goes_quiet(client):
     assert len(calls) == 1
 
 
+def test_summarise_now_is_structured_and_shared(client):
+    summariser = main.app.state.summariser
+    summariser.quiet = 60
+    m = post(client, "lunch at noon?")
+
+    async def fake_ask(path, payload, fallback):
+        return {
+            "summary": "Lunch at noon.",
+            "headline": "Lunch is at **noon**.",
+            "topics": [
+                {"title": "Lunch", "points": ["noon"], "source_message_ids": [m["id"]]}
+            ],
+            "decisions": [{"text": "Noon", "source_message_ids": [m["id"]]}],
+            "actions": "not a list",
+            "questions": [{"text": "Where?", "source_message_ids": [m["id"]]}, "junk"],
+        }
+
+    summariser.ask = fake_ask
+    with client.websocket_connect("/ws?user=Sam&room=demo") as ws:
+        body = client.get("/digest").json()
+        event = receive(ws, "summary")
+    assert (
+        body["summary"] == "Lunch at noon."
+        and body["headline"] == "Lunch is at **noon**."
+    )
+    summary = event["summary"]
+    assert summary["trigger"] == "manual" and summary["text"] == "Lunch at noon."
+    assert summary["topics"][0]["title"] == "Lunch"
+    assert summary["actions"] == [] and len(summary["questions"]) == 1
+    assert client.get("/rooms/demo/summary").json()["summary"] == summary
+
+
 def test_failed_summary_is_not_kept(client):
     summariser, calls = stub_summaries(answer=None)
     summariser.quiet = 0

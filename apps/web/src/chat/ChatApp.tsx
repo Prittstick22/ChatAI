@@ -591,7 +591,7 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
             className="panel"
             aria-label="Insights"
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 360, opacity: 1 }}
+            animate={{ width: 380, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 40 }}
           >
@@ -611,6 +611,7 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
                 onTab={setInsights}
                 onJump={jumpTo}
                 summary={summary}
+                previousSummary={state.previousSummaries[room.id]}
               />
             </div>
           </motion.aside>

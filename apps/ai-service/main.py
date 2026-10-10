@@ -4,12 +4,14 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from openai import AsyncOpenAI
 
+import digest as catchup
 import nudge_graph
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("ai-service")
 app = FastAPI(title="ChatAI Intelligence")
-graph = nudge_graph.build_graph(nudge_graph.chat_model())
+model = nudge_graph.chat_model()
+graph = nudge_graph.build_graph(model)
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY") or "missing")
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
@@ -47,6 +49,13 @@ async def ask(prompt: str, fallback: str):
 
 @app.post("/digest")
 async def digest(req: Conversation):
+    """Structured catch-up (digest.py): headline, topics, decisions, to-dos and open
+    questions with their source messages, plus the legacy plain-text `summary`."""
+    if os.getenv("OPENAI_API_KEY") and req.messages:
+        try:
+            return await catchup.summarise(model, req.messages)
+        except Exception as exc:
+            log.warning("structured digest failed: %r", exc)
     transcript = "\n".join(
         f"{m.get('user', 'Member')}: {m.get('text', '')}" for m in req.messages[-60:]
     )

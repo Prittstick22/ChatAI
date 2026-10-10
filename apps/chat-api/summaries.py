@@ -41,27 +41,47 @@ class Summariser:
 
     async def _summarise(self, room: str, trigger: str) -> None:
         async with self.locks.setdefault(room, asyncio.Lock()):
-            if not self.pending.get(room):
-                return  # another trigger already covered these messages
-            history = store.recent_for_ai(room)
-            if not history:
-                return
-            # Reset before the AI call, so messages sent meanwhile count towards the
-            # next summary.
-            self.pending[room] = 0
-            result = await self.ask("/digest", {"messages": history}, {})
-            text = result.get("summary")
-            if not isinstance(text, str) or not text.strip():
-                return
-            summary = {
-                "room": room,
-                "text": text.strip(),
-                "upto_message_id": history[-1]["id"],
-                "message_count": len(history),
-                "trigger": trigger,
-                "created_at": store.now(),
-            }
-            self.latest[room] = summary
-            await self.hub.broadcast(
-                {"type": "summary", "room": room, "summary": summary}, room=room
-            )
+            if self.pending.get(room):  # otherwise another trigger covered them
+                await self._run(room, trigger)
+
+    async def summarise_now(self, room: str) -> dict | None:
+        """On demand ("Summarise now"); shared with the room like any other."""
+        async with self.locks.setdefault(room, asyncio.Lock()):
+            return await self._run(room, "manual")
+
+    async def _run(self, room: str, trigger: str) -> dict | None:
+        history = store.recent_for_ai(room)
+        if not history:
+            return None
+        # Reset before the AI call, so messages sent meanwhile count towards the next
+        # summary.
+        self.pending[room] = 0
+        result = await self.ask("/digest", {"messages": history}, {})
+        text = result.get("summary")
+        if not isinstance(text, str) or not text.strip():
+            return None
+        summary = {
+            "room": room,
+            "text": text.strip(),
+            # Structured catch-up from the AI service; absent from older versions.
+            "headline": result.get("headline")
+            if isinstance(result.get("headline"), str)
+            else None,
+            **{key: _dicts(result.get(key)) for key in STRUCTURED},
+            "upto_message_id": history[-1]["id"],
+            "message_count": len(history),
+            "trigger": trigger,
+            "created_at": store.now(),
+        }
+        self.latest[room] = summary
+        await self.hub.broadcast(
+            {"type": "summary", "room": room, "summary": summary}, room=room
+        )
+        return summary
+
+
+STRUCTURED = ("topics", "decisions", "actions", "questions")
+
+
+def _dicts(value: object) -> list[dict]:
+    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []

@@ -75,7 +75,8 @@ export const chatApi = {
 
   // AI gateway. The chat API answers with a fallback whenever the AI service is down.
   summary: (room: string) => request<{ summary: Summary | null }>(`/rooms/${encodeURIComponent(room)}/summary`),
-  digest: (room: string) => request<{ summary: string; topics?: unknown[] }>('/digest' + query({ room })),
+  /** Summarise now: the result is also pushed to the room as a `summary` event. */
+  digest: (room: string) => request<{ summary: string } & Partial<Omit<Summary, 'text'>>>('/digest' + query({ room })),
   search: (text: string, room: string) => request<SearchResponse>('/search' + query({ query: text, room })),
   suggest: (room: string) => request<{ suggestion: string; proposals?: Proposal[] }>('/suggest' + query({ room })),
 
