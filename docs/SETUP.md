@@ -28,6 +28,13 @@ nano .env
 docker compose up --build
 ```
 
+## Seed a demo chat
+After the stack is running, seed a synthetic four-person conversation:
+```bash
+uv run scripts/seed_demo.py
+```
+The seeder creates the `Weekend Plans` room for Alex, Sam, Jordan and Taylor. It is safe to rerun: existing fixture messages are verified and not duplicated. Set `CHAT_API_URL` or pass `--api-url` to seed a different local stack. The fixture includes suggested semantic-search queries.
+
 ## Running without Docker (three terminals)
 **AI service**:
 ```bash
