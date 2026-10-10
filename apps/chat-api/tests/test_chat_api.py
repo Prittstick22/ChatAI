@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import time
 
@@ -866,3 +867,142 @@ def test_a_poll_that_gains_an_option_replaces_its_card(client):
         )
         grown = receive(ws, "nudge")["nudge"]
     assert grown["replaces"] == first["id"] and "previous_start_at" not in grown
+
+
+# ---------------------------------------------------------------- dev tools
+
+STORY = {
+    "room_name": "Saturday plans",
+    "created_by": "Alex",
+    "members": ["Sam", "Jordan"],
+    "presenter": "Sam",
+    "presenter_read": 2,
+    "messages": [
+        {"user": "Alex", "text": "Planning Saturday", "at": "-1d 16:02"},
+        {"user": "Sam", "text": "I'm in", "at": "-1d 16:05"},
+        {"user": "Jordan", "text": "Park at 2pm?", "at": "-1d 19:41"},
+        {"user": "Alex", "text": "2pm it is", "at": "-1d 19:47"},
+    ],
+    "other_rooms": [
+        {"room": "demo", "messages": [{"user": "Jordan", "text": "Slides are up"}]}
+    ],
+}
+
+
+@pytest.fixture
+def stories(tmp_path, monkeypatch):
+    import devtools
+
+    folder = tmp_path / "fixtures"
+    folder.mkdir()
+    (folder / "story.json").write_text(json.dumps(STORY))
+    (folder / "not_a_story.json").write_text(json.dumps({"hello": 1}))
+    monkeypatch.setattr(devtools, "FIXTURES_DIR", folder)
+    return folder
+
+
+def unread(client, user, room):
+    rooms = client.get(f"/rooms?user={user}").json()
+    return next(r["unread"] for r in rooms if r["id"] == room)
+
+
+def test_dev_tools_load_a_premade_chat(client, stories):
+    assert [s["id"] for s in client.get("/dev/stories").json()] == ["story"]
+    loaded = client.post("/dev/stories/story").json()
+    assert loaded == {"room": "saturday-plans", "name": "Saturday plans", "messages": 4}
+    history = client.get("/messages?room=saturday-plans").json()
+    assert [m["text"] for m in history] == [m["text"] for m in STORY["messages"]]
+    times = [m["created_at"] for m in history]
+    assert times == sorted(times) and times[0] < store.now()
+    # The presenter has been away since message 2; everyone else is up to date.
+    assert unread(client, "Sam", "saturday-plans") == 2
+    assert unread(client, "Jordan", "saturday-plans") == 0
+    assert [m["text"] for m in client.get("/messages?room=demo").json()] == [
+        "Slides are up"
+    ]
+
+    client.post("/dev/stories/story")  # again: replaced, not doubled
+    rooms = client.get("/rooms").json()
+    assert [r["message_count"] for r in rooms if r["name"] == "Saturday plans"] == [4]
+    assert len(client.get("/messages?room=demo").json()) == 1
+
+
+def test_dev_reset_backs_up_and_starts_again(client, stories, tmp_path):
+    post(client, "old news")
+    with client.websocket_connect("/ws?user=Sam") as ws:
+        result = client.post("/dev/reset", json={"story": "story"}).json()
+        assert receive(ws, "reset") == {
+            "type": "reset",
+            "note": "Started again with Saturday plans",
+            "room": "saturday-plans",
+        }
+    assert result["loaded"]["room"] == "saturday-plans"
+    with sqlite3.connect(result["backup"]) as old:
+        assert old.execute("SELECT text FROM messages").fetchall() == [("old news",)]
+    assert {r["id"] for r in client.get("/rooms").json()} == {"demo", "saturday-plans"}
+    assert client.get("/messages?room=saturday-plans").json()[0]["id"] == 1
+    assert [m["text"] for m in client.get("/messages?room=demo").json()] == [
+        "Slides are up"
+    ]
+
+    client.post("/dev/reset", json={})
+    assert [r["id"] for r in client.get("/rooms").json()] == ["demo"]
+    assert client.get("/messages?room=demo").json() == []
+
+
+def test_dev_tools_reuse_the_ids_of_deleted_chats(client, stories):
+    client.post("/dev/stories/story")
+    assert client.delete("/rooms/saturday-plans?user=Alex").status_code == 200
+    # A deleted room's id stays reserved for everyone else...
+    assert client.post("/dev/stories/story").json()["room"] == "saturday-plans-2"
+    # ...but starting again frees it.
+    client.post("/dev/reset", json={"story": "story"})
+    assert {r["id"] for r in client.get("/rooms").json()} == {"demo", "saturday-plans"}
+    assert post(client, "hi", room="saturday-plans")["room"] == "saturday-plans"
+
+
+def test_dev_reset_to_an_unknown_chat_deletes_nothing(client, stories):
+    post(client, "keep me")
+    assert client.post("/dev/reset", json={"story": "nope"}).status_code == 404
+    assert client.post("/dev/stories/..%2Fsecrets").status_code == 404
+    assert len(client.get("/messages?room=demo").json()) == 1
+
+
+def test_dev_clear_a_chat(client):
+    message = post(client, "lunch?")
+    client.post(
+        "/polls",
+        json={"question": "Lunch?", "options": ["Pizza", "Sushi"], "created_by": "Sam"},
+    )
+    client.post(
+        f"/messages/{message['id']}/reactions", json={"user": "Sam", "emoji": "👍"}
+    )
+    assert client.post("/dev/rooms/demo/clear").status_code == 200
+    assert client.get("/messages?room=demo").json() == []
+    assert client.get("/polls?room=demo").json() == []
+    assert [r["id"] for r in client.get("/rooms").json()] == ["demo"]
+
+
+def test_seeded_history_is_context_for_nudges(client, stories):
+    calls = []
+
+    async def fake_ask(path, payload, fallback):
+        calls.append(payload["new_message_ids"])
+        return {"proposals": []}
+
+    main.app.state.nudger.ask = fake_ask
+    post(client, "before", room="demo")
+    wait_for(lambda: calls)
+    client.post("/dev/reset", json={"story": "story"})
+    # Ids start from 1 again, so the old "analysed so far" must not carry over.
+    live = post(client, "Can we make it 3pm?", user="Jordan", room="saturday-plans")
+    wait_for(lambda: len(calls) == 2)
+    assert calls[1] == [live["id"]]
+
+
+def test_dev_tools_can_be_turned_off(client, monkeypatch):
+    import devtools
+
+    monkeypatch.setattr(devtools, "ENABLED", False)
+    assert client.get("/dev/stories").status_code == 404
+    assert client.post("/dev/reset", json={}).status_code == 404

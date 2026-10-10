@@ -687,3 +687,82 @@ def vote(poll_id: int, user: str, option_index: int) -> dict:
                 (poll_id, user, option_index),
             )
         return _poll(db, row)
+
+
+# ---------------------------------------------------------------- dev tools
+
+
+def backup(directory: str) -> str:
+    """Snapshot the whole database into `directory`; returns the copy's path."""
+    os.makedirs(directory, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = os.path.join(directory, f"chat.{stamp}.db")
+    with closing(connect()) as db, closing(sqlite3.connect(path)) as copy:
+        db.backup(copy)
+    return path
+
+
+TABLES = (
+    "votes",
+    "polls",
+    "reactions",
+    "reads",
+    "room_members",
+    "messages",
+    "rooms",
+    "deleted_rooms",
+)
+
+
+def wipe() -> None:
+    """Delete every room, message, poll and read position, and number messages from 1
+    again. The default room comes back, empty."""
+    with closing(connect()) as db:
+        with db:
+            for table in TABLES:
+                db.execute(f"DELETE FROM {table}")
+            db.execute("DELETE FROM sqlite_sequence")
+    init()
+
+
+def clear_room(room: str) -> None:
+    """Delete a room's messages, polls, reactions and read positions. The room and its
+    members stay."""
+    with closing(connect()) as db:
+        with db:
+            db.execute(
+                "DELETE FROM votes WHERE poll_id IN (SELECT id FROM polls WHERE room = ?)",
+                (room,),
+            )
+            db.execute("DELETE FROM polls WHERE room = ?", (room,))
+            db.execute(
+                "DELETE FROM reactions WHERE message_id IN (SELECT id FROM messages WHERE room = ?)",
+                (room,),
+            )
+            db.execute("DELETE FROM reads WHERE room = ?", (room,))
+            db.execute("DELETE FROM messages WHERE room = ?", (room,))
+
+
+def erase_room(room: str) -> None:
+    """Delete a room and everything in it, for the dev tools: no creator check, and
+    unlike delete_room its id isn't reserved, so a premade chat can be loaded again
+    under the same id."""
+    clear_room(room)
+    with closing(connect()) as db:
+        with db:
+            db.execute("DELETE FROM room_members WHERE room = ?", (room,))
+            db.execute("DELETE FROM rooms WHERE id = ?", (room,))
+
+
+def insert_history(room: str, messages: list[dict]) -> list[int]:
+    """Add messages that keep their own `created_at` (seeded history), oldest first.
+    Returns their ids."""
+    with closing(connect()) as db:
+        with db:
+            return [
+                db.execute(
+                    "INSERT INTO messages(room, user, text, created_at) VALUES (?, ?, ?, ?)",
+                    (room, m["user"], m["text"], m["created_at"]),
+                ).lastrowid
+                for m in messages
+            ]

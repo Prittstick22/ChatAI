@@ -91,3 +91,16 @@ export const chatApi = {
 };
 
 export type ChatApi = typeof chatApi;
+
+export type Story = { id: string; name: string; people: string[]; messages: number; presenter: string | null };
+type Loaded = { room: string; name: string; messages: number };
+
+/** The dev panel's tools (chat-api devtools.py). Each one makes every open tab reload. */
+export const devApi = {
+  stories: () => request<Story[]>('/dev/stories'),
+  load: (story: string) => request<Loaded>(`/dev/stories/${encodeURIComponent(story)}`, { method: 'POST' }),
+  /** Delete everything (after a backup), then load `story` if given. */
+  reset: (story?: string) => request<{ backup: string; loaded: Loaded | null }>('/dev/reset', { method: 'POST', json: { story } }),
+  clear: (room: string) => request<{ room: string }>(`/dev/rooms/${encodeURIComponent(room)}/clear`, { method: 'POST' }),
+  deleteRoom: (room: string) => request<{ room: string }>(`/dev/rooms/${encodeURIComponent(room)}`, { method: 'DELETE' }),
+};

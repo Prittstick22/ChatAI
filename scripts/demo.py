@@ -11,20 +11,16 @@
 Open http://localhost:5173/?as=Sam (the presenter) before playing a scene. The other
 people type and post through the public Chat API, with typing indicators, and wait for
 the AI's suggestions to arrive over the WebSocket, so each scene plays the same way.
-reset needs the stack from `docker compose up`; the backup lands in the chatdata
-volume under /data/backups.
+The same tools are in the web app's dev panel (Ctrl+Shift+D), scenes included. The
+backup lands in the chatdata volume under /data/backups.
 """
 
 import argparse
 import asyncio
 import json
-import subprocess
 import sys
-import time
 import urllib.parse
-from datetime import datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import websockets
 
@@ -33,7 +29,6 @@ import seed_demo
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "fixtures" / "demo_story.json"
 API = "http://localhost:8000"
-LONDON = ZoneInfo("Europe/London")
 SUGGESTION_TIMEOUT = 30
 
 
@@ -51,94 +46,17 @@ def api(path: str, payload: dict | None = None):
 # ---------------------------------------------------------------- reset
 
 
-def compose(*args: str, stdin: str | None = None) -> str:
-    result = subprocess.run(
-        ["docker", "compose", *args],
-        cwd=ROOT,
-        input=stdin,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise DemoError(f"docker compose {' '.join(args)} failed:\n{result.stderr}")
-    return result.stdout
-
-
-def wait_for_api(seconds: float = 30) -> None:
-    deadline = time.monotonic() + seconds
-    while True:
-        try:
-            api("/health")
-            return
-        except (DemoError, OSError):  # refused or reset while it starts
-            if time.monotonic() > deadline:
-                raise
-            time.sleep(0.5)
-
-
-def when(at: str, now: datetime) -> str:
-    """ "-1d 19:41" (yesterday at 19:41, London time) as a UTC ISO timestamp."""
-    days, clock = at.split()
-    hour, minute = map(int, clock.split(":"))
-    local = now.astimezone(LONDON) + timedelta(days=int(days.removesuffix("d")))
-    local = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    return local.astimezone(ZoneInfo("UTC")).isoformat()
-
-
-def set_times(times: dict[int, str]) -> None:
-    """Spread the seeded messages over the times in the fixture (the API stamps them
-    all with "now")."""
-    script = f"""
-import store
-db = store.connect()
-with db:
-    db.executemany("UPDATE messages SET created_at = ? WHERE id = ?", {[(at, mid) for mid, at in times.items()]!r})
-"""
-    compose("exec", "-T", "chat", "python", "-", stdin=script)
-
-
 def reset() -> None:
+    """The dev panel's "Reset the demo" (chat-api devtools.py)."""
+    print("Backing up, deleting every chat and loading the demo story…")
+    result = api("/dev/reset", {"story": FIXTURE.stem})
+    loaded = result["loaded"]
+    summary = api(f"/rooms/{loaded['room']}/summary")["summary"] or {}
     story = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    print("Backing up and wiping the chat database…")
-    compose("stop", "chat")
-    compose(
-        "run", "--rm", "--no-deps", "-T", "chat", "sh", "-c",
-        f"mkdir -p /data/backups && for f in /data/chat.db*; do [ -e \"$f\" ] && cp \"$f\" \"/data/backups/$(basename \"$f\").{stamp}\"; done; rm -f /data/chat.db /data/chat.db-wal /data/chat.db-shm",
-    )  # fmt: skip
-    compose("start", "chat")
-    wait_for_api()
-
-    try:
-        room_id, added, _ = seed_demo.run(API, FIXTURE)
-    except seed_demo.SeedError as exc:
-        raise DemoError(str(exc)) from exc
-    now = datetime.now(LONDON)
-    history = api(f"/messages?{urllib.parse.urlencode({'room': room_id})}")
-    times = {m["id"]: when(f["at"], now) for m, f in zip(history, story["messages"])}
-    for other in story.get("other_rooms", []):
-        for message in other["messages"]:
-            posted = api("/messages", {**message, "room": other["room"]})
-            times[posted["id"]] = when(message["at"], now)
-    set_times(times)
-
-    # The presenter read the start of the story and has been away since; everyone
-    # else is up to date.
-    read_upto = history[story["presenter_read"] - 1]["id"]
-    for person in [story["created_by"], *story["members"]]:
-        position = read_upto if person == story["presenter"] else history[-1]["id"]
-        api(f"/rooms/{room_id}/read", {"user": person, "message_id": position})
-
-    # Restart so suggestions only start from the live scenes, then make the catch-up
-    # ready so the presenter's card appears straight away.
-    compose("restart", "chat")
-    wait_for_api()
-    print("Preparing the catch-up summary…")
-    summary = api(f"/digest?{urllib.parse.urlencode({'room': room_id})}")
-    print(f"Seeded {story['room_name']!r} ({added} messages).")
-    print(f"Catch-up: {summary.get('headline') or summary.get('summary')}")
-    print(f"Backup: chatdata volume, /data/backups/chat.db.{stamp}")
-    print(f"\nOpen http://localhost:5173/?as={story['presenter']}#/{room_id}")
+    print(f"Seeded {loaded['name']!r} ({loaded['messages']} messages).")
+    print(f"Catch-up: {summary.get('headline') or summary.get('text')}")
+    print(f"Backup: {result['backup']}")
+    print(f"\nOpen http://localhost:5173/?as={story['presenter']}#/{loaded['room']}")
 
 
 # ---------------------------------------------------------------- live scenes
@@ -251,9 +169,7 @@ async def plan_scene() -> None:
         Person("Jordan", room) as jordan,
     ):
         await asyncio.sleep(1)
-        await alex.say(
-            "Should we do a quick call tomorrow at 7pm to go over the plan?"
-        )
+        await alex.say("Should we do a quick call tomorrow at 7pm to go over the plan?")
         await taylor.say("7 works for me")
         first = await alex.wait_for(
             lambda e: e["type"] == "nudge" and e["nudge"]["type"] == "event",

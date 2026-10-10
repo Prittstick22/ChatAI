@@ -5,6 +5,7 @@ import { ApiError, chatApi } from './api';
 import { RoomBadge } from './Avatar';
 import { Composer, type ComposerHandle } from './Composer';
 import { ConnectionBanner } from './ConnectionBanner';
+import { DevPanel } from './DevPanel';
 import { listNames } from './format';
 import { MessageList } from './MessageList';
 import type { RowActions } from './MessageRow';
@@ -19,6 +20,7 @@ type Props = { me: string; slots: ChatSlots; onSwitchIdentity: (name: string) =>
 
 const errorText = (e: unknown) => (e instanceof ApiError || e instanceof Error ? e.message : 'Something went wrong.');
 const localId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+const RESET_NOTE = 'chatai:reset-note';
 const INSIGHT_TABS: { id: InsightsTab; label: string; Icon: Icon }[] = [
   { id: 'catchup', label: 'Catch up', Icon: NotePencilIcon },
   { id: 'search', label: 'Search', Icon: MagnifyingGlassIcon },
@@ -114,6 +116,17 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
     setToasts((all) => [...all.slice(-2), { id, text }]);
     window.setTimeout(() => setToasts((all) => all.filter((t) => t.id !== id)), 4200);
   }, []);
+
+  // The dev tools reload every tab after replacing messages; say what changed.
+  useEffect(() => {
+    try {
+      const note = sessionStorage.getItem(RESET_NOTE);
+      sessionStorage.removeItem(RESET_NOTE);
+      if (note) toast(note);
+    } catch {
+      // storage unavailable
+    }
+  }, [toast]);
 
   // ---------------------------------------------------------------- identity and accent
 
@@ -313,6 +326,16 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
         break;
       case 'summary':
         dispatch({ type: 'summary', room: event.room, summary: event.summary });
+        break;
+      case 'reset':
+        // The dev tools replaced messages: start again from what the server has now.
+        try {
+          sessionStorage.setItem(RESET_NOTE, event.note ?? 'The chats were reset.');
+        } catch {
+          // storage unavailable
+        }
+        if (event.room) location.hash = '#/' + encodeURIComponent(event.room);
+        location.reload();
         break;
     }
   }, []);
@@ -683,6 +706,8 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
           </div>
         )}
       </section>
+
+      <DevPanel me={me} room={room} onSwitchIdentity={onSwitchIdentity} />
 
       <div className="toasts" aria-live="assertive">
         <AnimatePresence>

@@ -36,8 +36,17 @@ class Summariser:
             await self._summarise(room, "messages")
             return
         await asyncio.sleep(self.quiet)
-        if self.newest[room] == message_id:  # nobody has posted since
+        if self.newest.get(room) == message_id:  # nobody has posted since
             await self._summarise(room, "quiet")
+
+    def forget(self, room: str | None = None) -> None:
+        """Drop a room's summary and counts (every room's by default) once its
+        messages are replaced (devtools.py)."""
+        for state in (self.pending, self.newest, self.latest):
+            if room is None:
+                state.clear()
+            else:
+                state.pop(room, None)
 
     async def _summarise(self, room: str, trigger: str) -> None:
         async with self.locks.setdefault(room, asyncio.Lock()):

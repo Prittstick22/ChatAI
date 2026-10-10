@@ -45,10 +45,19 @@ class Nudger:
         # context, so the seeded demo chat doesn't produce stale nudges.
         self.analysed.setdefault(room, message_id - 1)
         await asyncio.sleep(self.debounce)
-        if self.latest[room] != message_id:
+        if self.latest.get(room) != message_id:
             return  # a newer message will run the analysis
         async with self.locks.setdefault(room, asyncio.Lock()):
             await self._analyse(room)
+
+    def forget(self, room: str | None = None) -> None:
+        """Drop what's known about a room (every room by default) once its messages
+        are replaced (devtools.py)."""
+        for state in (self.latest, self.analysed, self.sent, self.shown):
+            if room is None:
+                state.clear()
+            else:
+                state.pop(room, None)
 
     async def _analyse(self, room: str) -> None:
         history = store.recent_for_ai(room, CONTEXT)
