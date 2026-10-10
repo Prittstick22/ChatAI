@@ -180,6 +180,25 @@ async def create_room(body: NewRoom):
     return room
 
 
+@app.delete("/rooms/{room}")
+async def delete_room(
+    room: str, user: Annotated[str, Query(min_length=1, max_length=40)]
+):
+    user = user.strip()
+    store.delete_room(room, user)
+    for cache in (
+        app.state.summariser.latest,
+        app.state.summariser.pending,
+        app.state.summariser.newest,
+        app.state.nudger.latest,
+        app.state.nudger.analysed,
+        app.state.nudger.sent,
+    ):
+        cache.pop(room, None)
+    await hub.broadcast({"type": "room_deleted", "room": room})
+    return {"deleted": True, "room": room}
+
+
 @app.get("/rooms/{room}/summary")
 def room_summary(room: str):
     """The latest automatic summary (see summaries.py), or null before the first."""
