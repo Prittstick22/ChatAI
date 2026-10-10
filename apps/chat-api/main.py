@@ -379,6 +379,25 @@ async def suggest(room: str = store.DEFAULT_ROOM):
     )
 
 
+@app.get("/replies")
+async def replies(room: str, user: str):
+    """Up to three replies `user` could send next in `room`, written the way they write.
+    Empty when the newest message is their own, or when AI is unavailable."""
+    user = clean_user(user) or ""
+    history = store.recent_for_ai(room, 30)
+    if not user or not history or history[-1]["user"] == user:
+        return {"replies": []}
+    answer = await ai_call(
+        "/replies",
+        {"messages": history, "user": user, "style": store.style_samples(user)},
+        {"replies": []},
+    )
+    texts = answer.get("replies") if isinstance(answer, dict) else None
+    if not isinstance(texts, list):
+        return {"replies": []}
+    return {"replies": [t for t in texts if isinstance(t, str) and t.strip()][:3]}
+
+
 # ---------------------------------------------------------------- polls and calendar
 
 

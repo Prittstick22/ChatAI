@@ -455,6 +455,33 @@ def test_ai_routes_fall_back_when_ai_is_down(client):
     assert client.get("/suggest").json() == {"suggestion": "No suggestion"}
 
 
+def test_smart_replies_send_the_users_own_messages_for_style(client, monkeypatch):
+    calls = []
+
+    async def fake_ai(path, payload, fallback):
+        calls.append((path, payload))
+        return {"replies": ["sounds good", "", 7, "can't, sorry", "maybe", "extra"]}
+
+    post(client, "lol ok see u there", user="Sam", room="other")
+    poll = {"question": "Where?", "options": ["Pizza", "Sushi"], "created_by": "Sam"}
+    assert client.post("/polls", json=poll).status_code == 200
+    post(client, "Pizza at 7?", user="Alex")
+    assert client.get("/replies?room=demo&user=Alex").json() == {"replies": []}, (
+        "nothing to answer when the newest message is your own"
+    )
+    assert client.get("/replies?room=demo&user=Sam").json() == {"replies": []}, (
+        "AI down"
+    )
+
+    monkeypatch.setattr(main, "ai_call", fake_ai)
+    replies = client.get("/replies?room=demo&user=Sam").json()["replies"]
+    assert replies == ["sounds good", "can't, sorry", "maybe"]
+    path, payload = calls[-1]
+    assert path == "/replies" and payload["user"] == "Sam"
+    assert payload["style"] == ["lol ok see u there"], "own messages only, no polls"
+    assert payload["messages"][-1]["text"] == "Pizza at 7?"
+
+
 def search(client, query, room="demo"):
     r = client.get("/search", params={"query": query, "room": room})
     assert r.status_code == 200, r.text

@@ -82,6 +82,8 @@ export const chatApi = {
   digest: (room: string) => request<{ summary: string } & Partial<Omit<Summary, 'text'>>>('/digest' + query({ room })),
   search: (text: string, room: string) => request<SearchResponse>('/search' + query({ query: text, room })),
   suggest: (room: string) => request<{ suggestion: string; proposals?: Proposal[] }>('/suggest' + query({ room })),
+  /** Up to three replies `user` could send next, in their own style; [] when AI is down. */
+  replies: (room: string, user: string) => request<{ replies: string[] }>('/replies' + query({ room, user })),
 
   polls: (room?: string) => request<Poll[]>('/polls' + query({ room })),
   createPoll: (poll: NewPoll) => request<Poll>('/polls', { method: 'POST', json: poll }),
