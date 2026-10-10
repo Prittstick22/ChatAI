@@ -457,9 +457,20 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
   const renderCatchUp = useMemo(
     () =>
       CatchUp && room
-        ? (unread: ChatMessage[]) => <CatchUp room={room} me={me} api={chatApi} unread={unread} summary={summary} />
+        ? (unread: ChatMessage[]) => (
+            <CatchUp
+              key={`${room.id}-${me}`}
+              room={room}
+              me={me}
+              api={chatApi}
+              unread={unread}
+              summary={summary}
+              onJump={jumpTo}
+              onOpenSummary={() => setInsights('catchup')}
+            />
+          )
         : undefined,
-    [CatchUp, room, me, summary],
+    [CatchUp, room, me, summary, jumpTo],
   );
 
   const ComposerSlot = slots.composer;

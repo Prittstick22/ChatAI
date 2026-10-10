@@ -531,6 +531,108 @@
   background: color-mix(in oklab, var(--accent) 45%, transparent);
 }
 
+/* ---------------------------------------------------------------- while you were away */
+
+.away {
+  width: min(100%, 520px);
+  margin: 14px auto 6px;
+  padding: 14px 16px 12px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background:
+    linear-gradient(var(--side), var(--side)) padding-box,
+    linear-gradient(135deg, color-mix(in oklab, var(--accent) 55%, transparent), var(--line) 45%, var(--line)) border-box;
+  box-shadow: 0 10px 30px -18px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+.away-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-text);
+}
+
+.away-head h2 {
+  flex: 1;
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.away-meta {
+  margin: 2px 0 0 24px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.away-headline {
+  margin: 12px 0 4px;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
+.away .digest-skeleton {
+  padding: 12px 0 4px;
+}
+
+.away-lines {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.away .digest-mark.topic::after {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  content: '';
+}
+
+.digest-owner.you {
+  color: var(--accent-text);
+}
+
+.away-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.away-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 8px;
+}
+
+.away-foot:empty {
+  display: none;
+}
+
+.away-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.away-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .list-state {
   display: grid;
   justify-items: center;

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from nudge_graph import UNTRUSTED, transcript
 
 CONTEXT = 100
+MENTION = re.compile(r"@(\w+)")
 MAX_TOPICS, MAX_POINTS, MAX_ITEMS = 5, 3, 5
 
 PROMPT = f"""You write the catch-up for a group chat: what someone who missed it needs to know. {UNTRUSTED}
@@ -18,7 +19,7 @@ PROMPT = f"""You write the catch-up for a group chat: what someone who missed it
 - headline: one sentence of at most 16 words with the most important thing right now, e.g. "Filming moved to **3pm**; lunch is still undecided." No greeting.
 - topics: 2 to 5 threads of the conversation, newest first. Each has a 1 to 3 word title and 1 to 3 short points of at most 14 words.
 - decisions: what the group clearly agreed. Leave out anything only suggested.
-- actions: what someone said they would do or was asked to do. owner is that person's name exactly as written in the chat, or null if nobody took it on.
+- actions: what someone said they would do or was asked to do. owner is the person who will do it, not the one asking ("@Sam can you book the room?" is Sam's), with their name exactly as written in the chat, or null if nobody took it on.
 - questions: what was asked and hasn't been answered yet.
 - source_message_ids: for every topic and item, the ids of the messages it comes from.
 
@@ -76,7 +77,10 @@ async def summarise(model, messages: list[dict]) -> dict:
     """Run the structured summary and validate it against the messages sent."""
     window = [m for m in messages if isinstance(m.get("id"), int)][-CONTEXT:]
     known = {m["id"] for m in window}
-    people = {str(m.get("user")) for m in window}
+    # Owners must be people in the chat: anyone who wrote, or was @mentioned.
+    people = {str(m.get("user")) for m in window} | {
+        name for m in window for name in MENTION.findall(str(m.get("text", "")))
+    }
     structured = model.with_structured_output(Digest, method="json_schema")
     raw: Digest = await structured.ainvoke(
         [("system", PROMPT), ("human", transcript(window, set()))]

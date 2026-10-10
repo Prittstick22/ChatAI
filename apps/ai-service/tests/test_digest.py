@@ -86,3 +86,20 @@ def test_digest_endpoint_falls_back_to_text_when_structure_fails(monkeypatch):
     monkeypatch.setattr(main, "ask", plain)
     body = TestClient(main.app).post("/digest", json={"messages": CHAT}).json()
     assert body == {"summary": "Lunch: noon on Saturday"}
+
+
+def test_someone_asked_by_mention_can_own_a_to_do():
+    messages = CHAT + [
+        {
+            "id": 4,
+            "room": "demo",
+            "user": "Alex",
+            "text": "@Jordan can you book the room?",
+            "created_at": CHAT[-1]["created_at"],
+        }
+    ]
+    raw = Digest(
+        headline="Room needs booking.",
+        actions=[Action(text="Book the room", owner="Jordan", source_message_ids=[4])],
+    )
+    assert run(raw, messages)["actions"][0]["owner"] == "Jordan"
