@@ -251,6 +251,9 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
       case 'room':
         dispatch({ type: 'room/upsert', room: event.room });
         break;
+      case 'poll':
+        dispatch({ type: 'poll', poll: event.poll });
+        break;
       case 'nudge':
         dispatch({ type: 'nudge', room: event.room, nudge: event.nudge });
         break;
@@ -370,7 +373,7 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
 
   const editLast = () => {
     if (!room) return;
-    const mine = state.messages[room.id]?.findLast((m) => m.user === me && m.id > 0 && !m.deleted);
+    const mine = state.messages[room.id]?.findLast((m) => m.user === me && m.id > 0 && !m.deleted && !m.poll);
     if (mine) actions.edit(mine);
   };
 
@@ -437,6 +440,18 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
     }
     return map;
   }, [room, Nudge, nudges, messages, me, jumpTo]);
+
+  const PollSlot = slots.poll;
+  const renderPoll = useMemo(
+    () =>
+      PollSlot && room
+        ? (m: ChatMessage) =>
+            m.poll ? (
+              <PollSlot room={room} me={me} api={chatApi} poll={m.poll} message={m} onChange={(poll) => dispatch({ type: 'poll', poll })} />
+            ) : null
+        : undefined,
+    [PollSlot, room, me],
+  );
 
   const CatchUp = slots.catchUp;
   const renderCatchUp = useMemo(
@@ -555,6 +570,7 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
               onRetry={() => loadHistory(room.id)}
               onAtBottom={onAtBottom}
               renderCatchUp={renderCatchUp}
+              renderPoll={renderPoll}
               inserts={inserts}
             />
             <Composer

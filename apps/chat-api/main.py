@@ -147,6 +147,8 @@ class PollIn(BaseModel):
     options: list[PollText] = Field(min_length=2, max_length=10)
     room: RoomId = store.DEFAULT_ROOM
     created_by: Name | None = None
+    # The AI proposal (nudge) it was made from: a room gets one poll per proposal.
+    proposal_id: str | None = Field(default=None, max_length=120)
 
 
 class VoteIn(BaseModel):
@@ -373,8 +375,15 @@ def polls(room: str | None = None):
 
 @app.post("/polls")
 async def create_poll(p: PollIn):
-    poll = store.create_poll(p.question, p.options, p.room, p.created_by)
-    await hub.broadcast({"type": "poll", "poll": poll}, room=poll["room"])
+    """Creates the poll and posts it into the conversation as a message (Message.poll).
+    Asking again for the same proposal_id returns the first poll and posts nothing."""
+    poll, message = store.create_poll(
+        p.question, p.options, p.room, p.created_by, p.proposal_id
+    )
+    if message:
+        await hub.broadcast({"type": "message", "message": message}, room=p.room)
+        await hub.broadcast({"type": "poll", "poll": poll}, room=poll["room"])
+        run_in_background(app.state.summariser.after_message(message))
     return poll
 
 

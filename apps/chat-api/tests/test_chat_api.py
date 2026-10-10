@@ -226,7 +226,9 @@ def test_group_rooms_store_members_and_are_listed_only_for_them(client):
 
     alex_rooms = {room["id"]: room for room in client.get("/rooms?user=Alex").json()}
     sam_rooms = {room["id"]: room for room in client.get("/rooms?user=Sam").json()}
-    jordan_rooms = {room["id"]: room for room in client.get("/rooms?user=Jordan").json()}
+    jordan_rooms = {
+        room["id"]: room for room in client.get("/rooms?user=Jordan").json()
+    }
     assert created["id"] in alex_rooms and created["id"] in sam_rooms
     assert created["id"] not in jordan_rooms
     assert alex_rooms[created["id"]]["members"] == created["members"]
@@ -423,6 +425,55 @@ def test_search_merges_keyword_and_semantic_rankings(client, monkeypatch):
     ], "found by both first; other rooms and deleted messages never returned"
     assert found["results"][1]["highlight"] is None
     assert found["results"][1]["text"] == "Saturday at noon works for everyone"
+
+
+def test_polls_are_posted_into_the_conversation(client):
+    with client.websocket_connect("/ws?user=Sam&room=demo") as ws:
+        poll = client.post(
+            "/polls",
+            json={
+                "question": "Where should we eat?",
+                "options": ["Pizza", "Sushi"],
+                "created_by": "Alex",
+            },
+        ).json()
+        message = receive(ws, "message")["message"]
+        assert receive(ws, "poll")["poll"] == poll
+    assert message["user"] == "Alex" and message["text"] == "Where should we eat?"
+    assert message["poll"] == poll and poll["message_id"] == message["id"]
+
+    client.post(f"/polls/{poll['id']}/votes", json={"user": "Sam", "option_index": 1})
+    [shown] = client.get("/messages").json()
+    assert shown["poll"]["counts"] == [0, 1], "history carries the live results"
+    assert store.recent_for_ai("demo") == [
+        {
+            "id": message["id"],
+            "room": "demo",
+            "user": "Alex",
+            "text": "[Poll] Where should we eat? Options: Pizza (0 votes), Sushi (1 vote)",
+            "created_at": message["created_at"],
+            "poll_id": poll["id"],
+        }
+    ]
+    edit = client.patch(
+        f"/messages/{message['id']}", json={"user": "Alex", "text": "changed"}
+    )
+    assert edit.status_code == 400
+
+
+def test_one_poll_per_proposal(client):
+    body = {
+        "question": "Where should we eat?",
+        "options": ["Pizza", "Sushi"],
+        "created_by": "Alex",
+        "proposal_id": "poll-pizza-sushi",
+    }
+    first = client.post("/polls", json=body).json()
+    again = client.post("/polls", json={**body, "created_by": "Sam"}).json()
+    other_room = client.post("/polls", json={**body, "room": "lunch"}).json()
+    assert again == first and first["proposal_id"] == "poll-pizza-sushi"
+    assert other_room["id"] != first["id"]
+    assert [m["user"] for m in client.get("/messages").json()] == ["Alex"]
 
 
 def wait_for(condition, seconds=3):
@@ -630,3 +681,63 @@ def test_migrates_a_scaffold_database(tmp_path, monkeypatch):
         and message["deleted"] is False
         and message["reply_to"] is None
     )
+
+
+def event(at, sources):
+    return {
+        "id": f"event-{at}",
+        "type": "event",
+        "title": "Film the demo",
+        "start_at": at,
+        "source_message_ids": sources,
+    }
+
+
+def test_a_changed_plan_replaces_its_card(client):
+    nudger = main.app.state.nudger
+    answers = []
+
+    async def fake_ask(path, payload, fallback):
+        return {"proposals": [answers.pop(0)]}
+
+    nudger.ask = fake_ask
+    noon, three = "2026-10-11T12:00:00+01:00", "2026-10-11T15:00:00+01:00"
+    with client.websocket_connect("/ws?user=Sam&room=demo") as ws:
+        a = post(client, "film the demo tomorrow at 12?")
+        answers.append(event(noon, [a["id"]]))
+        first = receive(ws, "nudge")["nudge"]
+        assert "replaces" not in first
+
+        b = post(client, "can we push it to 3?", user="Sam")
+        answers.append(event(three, [a["id"], b["id"]]))
+        moved = receive(ws, "nudge")["nudge"]
+        assert moved["replaces"] == first["id"]
+        assert moved["previous_start_at"] == noon
+
+        c = post(client, "actually 12 is fine again")
+        answers.append(event(noon, [a["id"], c["id"]]))
+        back = receive(ws, "nudge")["nudge"]
+        assert back["replaces"] == moved["id"], "an old time can come back"
+
+        d = post(client, "and drinks on friday at 6?")
+        answers.append(event("2026-10-16T18:00:00+01:00", [d["id"]]))
+        assert "replaces" not in receive(ws, "nudge")["nudge"], "a separate plan"
+
+
+def test_poll_messages_are_context_for_nudges(client):
+    calls = []
+
+    async def fake_ask(path, payload, fallback):
+        calls.append(payload["new_message_ids"])
+        return {"proposals": []}
+
+    main.app.state.nudger.ask = fake_ask
+    a = post(client, "pizza or sushi?")
+    wait_for(lambda: calls)
+    client.post(
+        "/polls",
+        json={"question": "Lunch?", "options": ["Pizza", "Sushi"], "created_by": "Sam"},
+    )
+    b = post(client, "voted")
+    wait_for(lambda: len(calls) == 2)
+    assert calls == [[a["id"]], [b["id"]]]
