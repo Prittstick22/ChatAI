@@ -104,14 +104,14 @@ def test_event_without_a_clear_time_asks_for_one():
 def test_poll_options_are_cleaned():
     draft = PollDraft(
         question="Where should we eat?",
-        options=[" Pizza ", "pizza", "Sushi"],
+        options=[" Pizza ", "pizza", "sushi"],
         source_message_ids=[1, 2],
         confidence=0.8,
     )
     [proposal] = run(FakeModel(Detection=Detection(kind="poll"), PollDraft=draft))
     assert proposal["id"] == "poll-pizza-sushi"
     assert (
-        proposal["options"] == ["Pizza", "Sushi"]
+        proposal["options"] == ["Pizza", "Sushi"]  # trimmed, deduped, capitalised
         and proposal["question"] == "Where should we eat?"
     )
     assert proposal["start_at"] is None and proposal["needs_confirmation"] is True
