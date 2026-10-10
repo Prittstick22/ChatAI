@@ -116,7 +116,7 @@ def load(story_id: str) -> dict:
     rooms = store.list_rooms()
     for room in rooms:
         if room["name"] == story["room_name"]:
-            store.delete_room(room["id"])
+            store.erase_room(room["id"])
     room = store.create_room(story["room_name"], story["created_by"], story["members"])
     now = datetime.now(timezone.utc)
     ids = store.insert_history(room["id"], _timed(story["messages"], now))

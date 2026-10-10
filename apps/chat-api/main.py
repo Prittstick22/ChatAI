@@ -187,15 +187,8 @@ async def delete_room(
 ):
     user = user.strip()
     store.delete_room(room, user)
-    for cache in (
-        app.state.summariser.latest,
-        app.state.summariser.pending,
-        app.state.summariser.newest,
-        app.state.nudger.latest,
-        app.state.nudger.analysed,
-        app.state.nudger.sent,
-    ):
-        cache.pop(room, None)
+    for helper in (app.state.nudger, app.state.summariser):
+        helper.forget(room)
     await hub.broadcast({"type": "room_deleted", "room": room})
     return {"deleted": True, "room": room}
 
@@ -513,6 +506,6 @@ async def dev_delete_room(room: str):
     _dev_tools_on()
     _stop_background_work()
     name = _room_name(room)
-    store.delete_room(room)
+    store.erase_room(room)
     await _replaced(f"Deleted {name}", room)
     return {"room": room}

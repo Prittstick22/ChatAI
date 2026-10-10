@@ -702,7 +702,16 @@ def backup(directory: str) -> str:
     return path
 
 
-TABLES = ("votes", "polls", "reactions", "reads", "room_members", "messages", "rooms")
+TABLES = (
+    "votes",
+    "polls",
+    "reactions",
+    "reads",
+    "room_members",
+    "messages",
+    "rooms",
+    "deleted_rooms",
+)
 
 
 def wipe() -> None:
@@ -734,7 +743,10 @@ def clear_room(room: str) -> None:
             db.execute("DELETE FROM messages WHERE room = ?", (room,))
 
 
-def delete_room(room: str) -> None:
+def erase_room(room: str) -> None:
+    """Delete a room and everything in it, for the dev tools: no creator check, and
+    unlike delete_room its id isn't reserved, so a premade chat can be loaded again
+    under the same id."""
     clear_room(room)
     with closing(connect()) as db:
         with db:

@@ -950,6 +950,17 @@ def test_dev_reset_backs_up_and_starts_again(client, stories, tmp_path):
     assert client.get("/messages?room=demo").json() == []
 
 
+def test_dev_tools_reuse_the_ids_of_deleted_chats(client, stories):
+    client.post("/dev/stories/story")
+    assert client.delete("/rooms/saturday-plans?user=Alex").status_code == 200
+    # A deleted room's id stays reserved for everyone else...
+    assert client.post("/dev/stories/story").json()["room"] == "saturday-plans-2"
+    # ...but starting again frees it.
+    client.post("/dev/reset", json={"story": "story"})
+    assert {r["id"] for r in client.get("/rooms").json()} == {"demo", "saturday-plans"}
+    assert post(client, "hi", room="saturday-plans")["room"] == "saturday-plans"
+
+
 def test_dev_reset_to_an_unknown_chat_deletes_nothing(client, stories):
     post(client, "keep me")
     assert client.post("/dev/reset", json={"story": "nope"}).status_code == 404
