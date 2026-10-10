@@ -249,6 +249,9 @@ async def delete_message(
     await hub.broadcast(
         {"type": "message_updated", "message": message}, room=message["room"]
     )
+    room = next((r for r in store.list_rooms() if r["id"] == message["room"]), None)
+    if room is not None:
+        await hub.broadcast({"type": "room", "room": room}, room=message["room"])
     return message
 
 

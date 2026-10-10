@@ -6,6 +6,7 @@
 `GET /health` → `{"status":"ok"}`
 `GET /messages?room=demo` → array of Message
 `POST /messages` JSON `{"user":"Alex","text":"We meet Saturday","room":"demo"}` → 201 Message
+`DELETE /messages/{id}?user=Alex` → Message-shaped deletion notice; removes the message from history and live clients.
 `GET /rooms?user=Alex` → rooms visible to Alex
 `POST /rooms` JSON `{"name":"Food run","created_by":"Alex","members":["Sam"]}` → 201 Room
 `DELETE /rooms/{room}?user=Alex` → `{"left":true,"room":"food-run","user":"Alex"}`; the user leaves the chat without deleting it for others.
@@ -21,6 +22,12 @@
 {"id":1,"room":"demo","user":"Alex","text":"Meet Saturday at noon","created_at":"2026-10-10T09:45:00+00:00"}
 ```
 Stable id is integer; all clients deduplicate by id. Room defaults to `demo`. WS is currently global rather than room-filtered; use one room for MVP.
+
+Deleting a message removes its row, text, reactions, and any attached poll and votes.
+The delete response and existing `message_updated` WebSocket event carry a Message
+with `deleted:true` so clients can remove it immediately. If other messages reply to
+it, only its ID, room, and sender are retained so those replies can show a
+“Message deleted” quote; this minimal metadata is removed when no replies reference it.
 
 ### Room memberships
 

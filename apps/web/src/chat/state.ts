@@ -231,6 +231,17 @@ export function reducer(state: State, action: Action): State {
     case 'message/updated': {
       const { message } = action;
       const list = state.messages[message.room];
+      if (message.deleted) {
+        const remaining = list?.filter((m) => m.id !== message.id);
+        const next = list
+          ? { ...state, messages: { ...state.messages, [message.room]: remaining ?? [] } }
+          : state;
+        return withRoom(next, message.room, (r) =>
+          r.last_message?.id === message.id
+            ? { ...r, last_message: remaining?.filter((m) => m.id > 0).at(-1) ?? null }
+            : r,
+        );
+      }
       let next = state;
       if (list?.some((m) => m.id === message.id)) {
         next = { ...state, messages: { ...state.messages, [message.room]: upsert(list, message) } };

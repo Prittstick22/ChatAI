@@ -89,6 +89,26 @@ MIGRATIONS = [
         PRIMARY KEY(room, user)
     );
     """,
+    # 8: remove deleted messages while retaining minimal reply-preview metadata.
+    """
+    CREATE TABLE deleted_messages(
+        id INTEGER PRIMARY KEY,
+        room TEXT NOT NULL,
+        user TEXT NOT NULL
+    );
+    INSERT INTO deleted_messages(id, room, user)
+    SELECT m.id, m.room, m.user
+    FROM messages m
+    WHERE m.deleted_at IS NOT NULL
+      AND EXISTS (SELECT 1 FROM messages r WHERE r.reply_to = m.id AND r.deleted_at IS NULL);
+    DELETE FROM reactions
+    WHERE message_id IN (SELECT id FROM messages WHERE deleted_at IS NOT NULL);
+    DELETE FROM votes
+    WHERE poll_id IN (SELECT poll_id FROM messages WHERE deleted_at IS NOT NULL AND poll_id IS NOT NULL);
+    DELETE FROM polls
+    WHERE id IN (SELECT poll_id FROM messages WHERE deleted_at IS NOT NULL AND poll_id IS NOT NULL);
+    DELETE FROM messages WHERE deleted_at IS NOT NULL;
+    """,
 ]
 
 
@@ -154,8 +174,10 @@ def init() -> None:
 
 MESSAGE_SELECT = """
 SELECT m.id, m.room, m.user, m.text, m.created_at, m.reply_to, m.edited_at, m.deleted_at,
-       m.poll_id, p.user AS parent_user, p.text AS parent_text, p.deleted_at AS parent_deleted_at
+       m.poll_id, p.user AS parent_user, p.text AS parent_text, p.deleted_at AS parent_deleted_at,
+       d.user AS removed_parent_user
 FROM messages m LEFT JOIN messages p ON p.id = m.reply_to
+LEFT JOIN deleted_messages d ON d.id = m.reply_to
 """
 
 
@@ -183,11 +205,12 @@ def _message(
 ) -> dict:
     deleted = row["deleted_at"] is not None
     preview = None
-    if row["reply_to"] is not None and row["parent_user"] is not None:
-        parent_deleted = row["parent_deleted_at"] is not None
+    parent_user = row["parent_user"] or row["removed_parent_user"]
+    if row["reply_to"] is not None and parent_user is not None:
+        parent_deleted = row["parent_user"] is None or row["parent_deleted_at"] is not None
         preview = {
             "id": row["reply_to"],
-            "user": row["parent_user"],
+            "user": parent_user,
             "text": "" if parent_deleted else row["parent_text"][:PREVIEW_CHARS],
             "deleted": parent_deleted,
         }
@@ -417,15 +440,34 @@ def edit_message(message_id: int, user: str, text: str) -> dict:
 
 def delete_message(message_id: int, user: str) -> dict:
     with closing(connect()) as db:
-        _own_live_message(db, message_id, user)
+        row = _own_live_message(db, message_id, user)
+        message = _get(db, message_id)
+        poll_id = row["poll_id"]
         with db:
-            # Erase the text too, so "delete for everyone" doesn't leave it in the file.
+            has_replies = db.execute(
+                "SELECT 1 FROM messages WHERE reply_to = ? LIMIT 1", (message_id,)
+            ).fetchone()
+            if has_replies:
+                db.execute(
+                    "INSERT OR REPLACE INTO deleted_messages(id, room, user) VALUES (?, ?, ?)",
+                    (message_id, row["room"], row["user"]),
+                )
             db.execute(
-                "UPDATE messages SET text = '', deleted_at = ? WHERE id = ?",
-                (now(), message_id),
+                "DELETE FROM reactions WHERE message_id = ?", (message_id,)
             )
-            db.execute("DELETE FROM reactions WHERE message_id = ?", (message_id,))
-        return _get(db, message_id)
+            if poll_id is not None:
+                db.execute("DELETE FROM votes WHERE poll_id = ?", (poll_id,))
+                db.execute("DELETE FROM polls WHERE id = ?", (poll_id,))
+            db.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+            if message["reply_to"] is not None:
+                db.execute(
+                    """DELETE FROM deleted_messages
+                       WHERE id = ? AND NOT EXISTS (
+                           SELECT 1 FROM messages WHERE reply_to = deleted_messages.id
+                       )""",
+                    (message["reply_to"],),
+                )
+        return {**message, "text": "", "deleted": True, "reactions": [], "poll": None}
 
 
 def toggle_reaction(message_id: int, user: str, emoji: str) -> dict:

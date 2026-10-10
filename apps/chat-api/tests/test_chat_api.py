@@ -106,12 +106,17 @@ def test_only_the_sender_can_edit_or_delete(client):
     assert client.delete(f"/messages/{m['id']}?user=Sam").status_code == 403
     deleted = client.delete(f"/messages/{m['id']}?user=Alex").json()
     assert deleted["deleted"] is True and deleted["text"] == ""
-    assert (
-        client.patch(
-            f"/messages/{m['id']}", json={"user": "Alex", "text": "again"}
-        ).status_code
-        == 409
-    )
+    assert client.get("/messages").json() == []
+    with sqlite3.connect(store.db_path()) as db:
+        assert db.execute(
+            "SELECT 1 FROM messages WHERE id = ?", (m["id"],)
+        ).fetchone() is None
+        assert db.execute(
+            "SELECT 1 FROM deleted_messages WHERE id = ?", (m["id"],)
+        ).fetchone() is None
+    assert client.patch(
+        f"/messages/{m['id']}", json={"user": "Alex", "text": "again"}
+    ).status_code == 404
     assert (
         client.patch("/messages/999", json={"user": "Alex", "text": "x"}).status_code
         == 404
@@ -121,12 +126,15 @@ def test_only_the_sender_can_edit_or_delete(client):
 def test_deleting_a_parent_updates_reply_previews(client):
     parent = post(client, "secret plan")
     reply = post(client, "ok", user="Sam", reply_to=parent["id"])
-    client.delete(f"/messages/{parent['id']}?user=Alex")
+    deleted = client.delete(f"/messages/{parent['id']}?user=Alex").json()
+    assert deleted["id"] == parent["id"] and deleted["deleted"] is True
     with sqlite3.connect(store.db_path()) as db:
-        stored = db.execute(
-            "SELECT text FROM messages WHERE id = ?", (parent["id"],)
-        ).fetchone()
-    assert stored == ("",), "deleted text must not stay in the database"
+        assert db.execute(
+            "SELECT 1 FROM messages WHERE id = ?", (parent["id"],)
+        ).fetchone() is None
+        assert db.execute(
+            "SELECT room, user FROM deleted_messages WHERE id = ?", (parent["id"],)
+        ).fetchone() == ("demo", "Alex")
     listed = {m["id"]: m for m in client.get("/messages").json()}
     assert listed[reply["id"]]["reply_preview"] == {
         "id": parent["id"],
@@ -134,6 +142,52 @@ def test_deleting_a_parent_updates_reply_previews(client):
         "text": "",
         "deleted": True,
     }
+    client.delete(f"/messages/{reply['id']}?user=Sam")
+    with sqlite3.connect(store.db_path()) as db:
+        assert db.execute(
+            "SELECT 1 FROM deleted_messages WHERE id = ?", (parent["id"],)
+        ).fetchone() is None
+
+
+def test_deleting_poll_message_removes_poll_and_votes(client):
+    poll = client.post(
+        "/polls",
+        json={
+            "question": "Lunch?",
+            "options": ["Pizza", "Sushi"],
+            "created_by": "Alex",
+        },
+    ).json()
+    client.post(
+        f"/polls/{poll['id']}/votes",
+        json={"user": "Sam", "option_index": 0},
+    )
+
+    deleted = client.delete(f"/messages/{poll['message_id']}?user=Alex")
+
+    assert deleted.status_code == 200 and deleted.json()["deleted"] is True
+    assert client.get("/polls").json() == []
+    with sqlite3.connect(store.db_path()) as db:
+        assert db.execute(
+            "SELECT 1 FROM messages WHERE id = ?", (poll["message_id"],)
+        ).fetchone() is None
+        assert db.execute(
+            "SELECT 1 FROM votes WHERE poll_id = ?", (poll["id"],)
+        ).fetchone() is None
+
+
+def test_delete_broadcasts_removed_message_and_updated_room(client):
+    first = post(client, "First")
+    latest = post(client, "Latest")
+    with client.websocket_connect("/ws?user=Sam&room=demo") as ws:
+        deleted = client.delete(f"/messages/{latest['id']}?user=Alex").json()
+        event = receive(ws, "message_updated")
+        room_event = receive(ws, "room")
+
+    assert event["message"]["id"] == deleted["id"]
+    assert event["message"]["deleted"] is True
+    assert room_event["room"]["last_message"]["id"] == first["id"]
+    assert room_event["room"]["message_count"] == 1
 
 
 def test_reactions_toggle_per_user(client):
@@ -152,7 +206,7 @@ def test_reactions_toggle_per_user(client):
         {"emoji": "👍", "users": ["Sam"]},
     ]
     client.delete(f"/messages/{m['id']}?user=Alex")
-    assert client.post(url, json={"user": "Sam", "emoji": "🎉"}).status_code == 409
+    assert client.post(url, json={"user": "Sam", "emoji": "🎉"}).status_code == 404
     assert (
         client.post(
             "/messages/999/reactions", json={"user": "Sam", "emoji": "🎉"}
