@@ -3,7 +3,7 @@
 ## Before 09:30
 - [ ] Everyone accepts collaborator invites, clones the repo and opens [setup](SETUP.md).
 - [ ] Assign named people to AI, action integrations and QA; nm-04 owns base messaging.
-- [ ] Team agrees on IDEs, Node 20+, Python 3.11+, Docker Desktop, Git credentials.
+- [ ] Team agrees on IDEs, Node 20+, uv, Docker Desktop, Git credentials.
 - [ ] Share model billing budget and issue each developer **their own key** through a secure channel. Never paste secrets in issues or commits.
 - [ ] Agree to use only synthetic demo data.
 - [ ] Verify hackathon rules on pre-existing scaffolding and AI-generated code.
@@ -12,7 +12,7 @@
 1. Clone main; copy .env.example to .env.
 2. Start Docker Desktop and run `docker compose up --build`.
 3. Open web and the API docs.
-4. In another terminal run `python scripts/smoke_test.py`.
+4. In another terminal run `uv run scripts/smoke_test.py`.
 5. Record failures in #24's implementation checklist; do not assume the scaffold has already passed CI.
 6. Freeze payload formats listed in [API contract](API_CONTRACT.md).
 7. Have each developer create a feature branch from the latest main.

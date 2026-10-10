@@ -3,8 +3,10 @@
 ## Prerequisites
 - Git and GitHub access
 - Docker Desktop with Docker Compose (recommended; start Docker Desktop before running commands)
-- Python 3.11+ and Node.js 20+ with npm for non-Docker work
-- Editor: VS Code, with Python, Pylance, ESLint and Prettier extensions
+- [uv](https://docs.astral.sh/uv/) and Node.js 20+ with npm for non-Docker work. uv installs the right Python (3.11, from each service's `.python-version`) by itself.
+  - macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh` (or `brew install uv`)
+  - Windows: `winget install --id=astral-sh.uv -e`
+- Editor: VS Code, with Python, Pylance, ESLint and Prettier extensions. Open `ChatAI.code-workspace` (File → Open Workspace from File), not the repo folder, so each Python service gets its own interpreter. Run `uv sync` once in `apps/chat-api` and `apps/ai-service` to create their `.venv`; if VS Code doesn't pick it, run **Python: Select Interpreter**, choose the service folder, then its `.venv`.
 - Optional: OpenAI API key, stored **only** in a local `.env`
 
 ## Windows 10/11 — PowerShell
@@ -30,20 +32,14 @@ docker compose up --build
 **AI service**:
 ```bash
 cd apps/ai-service
-python -m venv .venv
-# macOS/Linux: source .venv/bin/activate
-# Windows PowerShell: .venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-uvicorn main:app --reload --port 8001
+uv run uvicorn main:app --reload --port 8001
 ```
 **Chat service** in separate terminal:
 ```bash
 cd apps/chat-api
-python -m venv .venv
-# Activate as above
-python -m pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uv run uvicorn main:app --reload --port 8000
 ```
+`uv run` creates `.venv` and installs the locked dependencies on first use, so there is no venv to activate.
 **React** in a third terminal:
 ```bash
 cd apps/web
@@ -52,7 +48,11 @@ npm run dev
 ```
 For local execution without Compose, set `AI_URL=http://localhost:8001` for chat and supply `OPENAI_API_KEY` to the AI service shell if needed.
 
-If Windows blocks PowerShell environment activation, use `.venv\Scripts\python.exe -m pip ...` and `.venv\Scripts\python.exe -m uvicorn ...` instead of changing system execution policies.
+## Python dependencies (uv)
+uv is the package manager for both Python services; each has its own `pyproject.toml` and `uv.lock`. Do not use `pip install`.
+- Add a package: `cd apps/<service>` then `uv add <package>`. Commit both `pyproject.toml` and `uv.lock`.
+- Remove one: `uv remove <package>`.
+- After pulling someone else's dependency change, `uv run` picks it up automatically; rebuild Docker with `docker compose up --build`.
 
 ## Smoke checks
 1. Open both FastAPI `/docs` interfaces.
@@ -66,6 +66,7 @@ If Windows blocks PowerShell environment activation, use `.venv\Scripts\python.e
 - CORS: add the exact frontend origin to `CORS_ORIGINS` and restart chat.
 - No key: set `OPENAI_API_KEY` in `.env`; restart `docker compose up --build`.
 - Dependency issue: `docker compose build --no-cache`.
+- Docker build fails at `uv sync --locked`: `pyproject.toml` changed without updating the lock. Run `uv lock` in that service and commit `uv.lock`.
 - View logs: `docker compose logs -f ai chat web`.
 - Reset demo SQLite data: `docker compose down -v` (destructive).
 - Never commit your `.env` or share keys in chat/issues.

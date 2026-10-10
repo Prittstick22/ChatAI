@@ -1,0 +1,16 @@
+{
+  "folders": [
+    { "name": "chat-api", "path": "apps/chat-api" },
+    { "name": "ai-service", "path": "apps/ai-service" },
+    { "name": "web", "path": "apps/web" },
+    { "name": "ChatAI (root)", "path": "." }
+  ],
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode"
+    ]
+  }
+}

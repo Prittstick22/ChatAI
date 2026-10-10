@@ -34,7 +34,7 @@
 | 09:30–09:45 | **M0 — setup** | Each laptop clones, env variables are set, Docker starts or direct local startup works | Fix environment; avoid diverging |
 | 09:45–10:00 | **M1 — contract freeze** | Agree POST /messages, WS event shape, AI /digest /search /suggest JSON and React component slots | No new endpoint shape without group agreement |
 | 10:00–11:00 | **M2 — messaging vertical slice** | Two browser tabs share new messages instantly; refresh retains history | Temporarily disable AI panels; nm-04 and Dev fix chat |
-| 11:00–11:30 | **M3 — shared baseline** | `python scripts/smoke_test.py` passes core checks; PR merged; Jin and Vera can call services | Fix CORS, host, imports; don't add scope |
+| 11:00–11:30 | **M3 — shared baseline** | `uv run scripts/smoke_test.py` passes core checks; PR merged; Jin and Vera can call services | Fix CORS, host, imports; don't add scope |
 | 11:30–12:30 | **M4 — AI vertical slice** | 20+ seeded messages summarised; 3 semantic queries return source messages | Fall back to digest only, keep text search |
 | 12:30–13:30 | **M5 — intelligent action** | An event suggestion appears and user can accept/download ICS; poll optional | Keep manually created poll or ICS fallback |
 | 13:30–14:15 | **M6 — integration gate** | Rehearse complete demo on clean app twice, no unhandled errors | Kill lowest value features |

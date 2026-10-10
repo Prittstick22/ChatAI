@@ -1,1 +1,221 @@
-*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Arial;background:#f4f5fa;color:#18243a}.layout{display:grid;grid-template-columns:225px minmax(300px,1fr) 335px;height:100vh}aside{background:#171d35;color:#fff;padding:24px}.logo{font-size:25px;font-weight:800;color:#b3a7ff}aside p{color:#b3bdd5;font-size:13px;line-height:1.6}h4{font-size:11px;color:#a8b4d6;margin-top:32px;letter-spacing:1.4px}.room{padding:12px;border-radius:9px;background:#353960}select{width:100%;padding:10px;border-radius:8px;background:#272f4d;color:white;border:1px solid #536080}.fine{font-size:11px}main{min-width:0;display:flex;flex-direction:column;background:#fff}header{height:75px;border-bottom:1px solid #e9ebf4;display:flex;align-items:center;justify-content:space-between;padding:22px}header span{font-size:12px;color:#8490a2}.messages{padding:24px;flex:1;overflow-y:auto}.message{max-width:75%;margin:12px 0;padding:13px 16px;background:#f0f2fa;border-radius:15px;overflow-wrap:anywhere}.message.mine{margin-left:auto;background:#e5e0ff}.message b{font-size:12px;color:#5845bd}.message p{margin:5px 0}.message small{color:#8a90a4}.composer{display:flex;gap:10px;padding:18px;border-top:1px solid #e5e7f0}input{width:100%;border:1px solid #e0e3ec;border-radius:9px;padding:12px;background:white}button{background:#6354d5;border:0;color:white;padding:10px 14px;border-radius:9px;cursor:pointer;white-space:nowrap}button:hover{filter:brightness(.92)}.intelligence{padding:24px;background:#f8f8fc;border-left:1px solid #e4e5ee;overflow-y:auto}.intelligence h2{font-size:23px;color:#5343bb}.intelligence h3{font-size:16px;margin-top:30px}nav{display:flex;gap:4px}nav button{background:transparent;color:#656b83;padding:9px}nav button.active{background:#e9e5ff;color:#4934b8}.result,.hit{padding:14px;line-height:1.5;background:white;border:1px solid #e6e7ef;border-radius:11px;margin-top:13px;white-space:pre-wrap;overflow-wrap:anywhere}.hit button{margin:7px 6px 0 0}.error{padding:10px;background:#ffe5e5;color:#9b1111}.intelligence form{display:flex;gap:6px;flex-wrap:wrap}.intelligence form input{min-width:0}a{display:block;margin-top:20px;color:#5343bb}@media(max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}aside{display:none}.intelligence{border-left:0;max-height:43vh}.messages{min-height:25vh}main{min-height:50vh}}
+/* Design tokens and base styles. Component styles live in chat/chat.css; feature
+   components should keep their own scoped CSS and reuse these variables. */
+
+/* The accent is whoever you're chatting as. Registering it lets the whole UI ease
+   into a new colour when you switch identity. */
+@property --accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #2f54eb;
+}
+
+:root {
+  --font: 'Figtree Variable', 'Figtree', ui-sans-serif, system-ui, sans-serif;
+
+  --canvas: #ffffff;
+  --side: color-mix(in oklab, var(--accent) 5%, #f4f5f7);
+  --raised: #ffffff;
+  --bubble: #eff1f4;
+  --hover: color-mix(in oklab, var(--ink) 6%, transparent);
+  --line: #e3e6ea;
+  --ink: #1b1d22;
+  --muted: #656a73;
+  --faint: #8c929b;
+  --danger: #c92a2a;
+  --online: #1f9d63;
+  --warn-bg: #fff3d1;
+  --warn-ink: #714600;
+  --ok-bg: #def5e8;
+  --ok-ink: #0b6542;
+  --on-accent: #ffffff;
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, var(--canvas));
+  --accent-text: color-mix(in oklab, var(--accent) 88%, black);
+  --shadow-pop: 0 14px 36px -14px rgb(18 22 30 / 0.32), 0 3px 8px -3px rgb(18 22 30 / 0.12);
+  --focus: 0 0 0 3px color-mix(in oklab, var(--accent) 32%, transparent);
+
+  --r-bubble: 20px;
+  --r-join: 6px;
+  --r-control: 12px;
+
+  color-scheme: light;
+  transition: --accent 520ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #16181c;
+    --side: color-mix(in oklab, var(--accent) 8%, #1c1f24);
+    --raised: #24272d;
+    --bubble: #272b31;
+    --line: #30343b;
+    --ink: #eceef1;
+    --muted: #a3a9b2;
+    --faint: #7d838c;
+    --danger: #ff8080;
+    --online: #3ecf8e;
+    --warn-bg: #3b2f12;
+    --warn-ink: #ffd98c;
+    --ok-bg: #11362a;
+    --ok-ink: #93e6c2;
+    --accent-soft: color-mix(in oklab, var(--accent) 22%, var(--canvas));
+    --accent-text: color-mix(in oklab, var(--accent) 50%, white);
+    --shadow-pop: 0 16px 40px -14px rgb(0 0 0 / 0.7), 0 3px 10px -3px rgb(0 0 0 / 0.45);
+    color-scheme: dark;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    transition: none;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 26%, transparent);
+}
+
+/* ---------------------------------------------------------------- shared controls */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: filter 0.15s, transform 0.15s;
+}
+
+.button:hover {
+  filter: brightness(1.07);
+}
+
+.button:active {
+  transform: scale(0.97);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+  filter: none;
+  transform: none;
+}
+
+.button.secondary {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+}
+
+.icon-button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.icon-button.pressed {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.icon-button.small {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.field-error {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+input:not([type]),
+input[type='text'] {
+  height: 38px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--canvas);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input:not([type]):focus-visible,
+input[type='text']:focus-visible {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--line));
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

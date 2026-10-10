@@ -1,6 +1,9 @@
 FROM python:3.11-slim
+COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /bin/uv
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py .
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev
+COPY *.py ./
+ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
