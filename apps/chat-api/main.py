@@ -64,6 +64,8 @@ async def lifespan(app: FastAPI):
     store.init()
     async with httpx.AsyncClient(timeout=AI_TIMEOUT) as client:
         app.state.ai = client
+        # Looked up on each call so tests can stub ai_call.
+        app.state.nudger = nudges.Nudger(hub, lambda *args: ai_call(*args))
         yield
     for task in list(background):
         task.cancel()
@@ -199,7 +201,7 @@ async def post_message(m: NewMessage):
     if m.client_id:
         message["client_id"] = m.client_id
     await hub.broadcast({"type": "message", "message": message}, room=m.room)
-    run_in_background(nudges.after_message(message, hub))
+    run_in_background(app.state.nudger.after_message(message))
     return message
 
 
@@ -235,7 +237,7 @@ async def react(message_id: int, body: ReactionIn):
 @app.websocket("/ws")
 async def ws_events(ws: WebSocket, user: str | None = None, room: str | None = None):
     """Server events: message, message_updated, typing, presence, read, room, poll,
-    pong (and nudge, reserved for the AI pipeline). Client events: typing, ping."""
+    pong and nudge (AI proposals, see nudges.py). Client events: typing, ping."""
     await ws.accept()
     client = Client(ws, clean_user(user), room or None)
     await hub.join(client)

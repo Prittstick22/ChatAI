@@ -1,4 +1,5 @@
 import sqlite3
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +13,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PATH", str(tmp_path / "chat.db"))
     # Nothing listens on the discard port, so every AI call takes the fallback path.
     monkeypatch.setattr(main, "AI_URL", "http://127.0.0.1:9")
+    monkeypatch.setenv("NUDGE_DEBOUNCE", "0")
     with TestClient(main.app) as c:
         yield c
 
@@ -372,6 +374,77 @@ def test_search_merges_keyword_and_semantic_rankings(client, monkeypatch):
     ], "found by both first; other rooms and deleted messages never returned"
     assert found["results"][1]["highlight"] is None
     assert found["results"][1]["text"] == "Saturday at noon works for everyone"
+
+
+def wait_for(condition, seconds=3):
+    deadline = time.monotonic() + seconds
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        time.sleep(0.02)
+
+
+POLL = {
+    "id": "poll-pizza-sushi",
+    "type": "poll",
+    "question": "Where should we eat?",
+    "options": ["Pizza", "Sushi"],
+    "needs_confirmation": True,
+}
+
+
+def test_nudges_reach_the_room_once(client):
+    nudger = main.app.state.nudger
+    calls = []
+
+    async def fake_ask(path, payload, fallback):
+        calls.append(payload["new_message_ids"])
+        newest = payload["new_message_ids"][-1]
+        return {
+            "proposals": [
+                {**POLL, "source_message_ids": [newest]},
+                {"id": "ghost", "type": "event", "title": "x", "source_message_ids": [999]},
+                {"id": "junk", "type": "poll", "question": "?", "options": ["one"], "source_message_ids": [newest]},
+            ]
+        }
+
+    nudger.ask = fake_ask
+    with client.websocket_connect("/ws?user=Sam&room=demo") as ws:
+        first = post(client, "pizza or sushi?")
+        nudge = receive(ws, "nudge")
+        assert nudge == {
+            "type": "nudge",
+            "room": "demo",
+            "nudge": {**POLL, "source_message_ids": [first["id"]]},
+        }
+        second = post(client, "either works")
+        wait_for(lambda: len(calls) == 2)
+        time.sleep(0.1)
+        ws.send_json({"type": "ping"})
+        later = []
+        while (event := ws.receive_json())["type"] != "pong":
+            later.append(event["type"])
+        assert "nudge" not in later, "the same proposal is never pushed twice"
+    assert calls == [[first["id"]], [second["id"]]]
+
+
+def test_nudges_wait_for_a_quiet_moment(client):
+    nudger = main.app.state.nudger
+    nudger.debounce = 0.3
+    calls = []
+
+    async def fake_ask(path, payload, fallback):
+        calls.append(([m["id"] for m in payload["messages"]], payload["new_message_ids"]))
+        return {"proposals": []}
+
+    nudger.ask = fake_ask
+    old = store.create_message("demo", "Alex", "seeded before the server started")
+    a = post(client, "lunch saturday?")
+    b = post(client, "noon works", user="Sam")
+    wait_for(lambda: calls)
+    time.sleep(0.4)
+    assert calls == [([old["id"], a["id"], b["id"]], [a["id"], b["id"]])], (
+        "one analysis per burst; earlier history is context, not new"
+    )
 
 
 def test_calendar_export(client):
