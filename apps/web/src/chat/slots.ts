@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import type { ChatApi } from './api';
-import type { ChatMessage, Proposal, Room, Summary } from './types';
+import type { ChatMessage, Poll, Proposal, Room, Summary } from './types';
 
 /**
  * Where AI features plug into the chat UI. main.tsx passes components in; the chat
@@ -32,6 +32,10 @@ export type NudgeSlotProps = Base & {
   onJump: (messageId: number) => void;
 };
 
+/** A poll posted into the conversation, inside its message. `poll` updates live as
+ * people vote; pass the poll a vote returns to `onChange` to show it straight away. */
+export type PollSlotProps = Base & { poll: Poll; message: ChatMessage; onChange: (poll: Poll) => void };
+
 /** Shown on the "new messages" divider when the room is opened with unread messages. */
 export type CatchUpSlotProps = Base & { unread: ChatMessage[]; summary?: Summary };
 
@@ -41,6 +45,7 @@ export type ComposerSlotProps = Base & { messages: ChatMessage[]; insert: (text:
 export type ChatSlots = {
   insights?: ComponentType<InsightsSlotProps>;
   nudge?: ComponentType<NudgeSlotProps>;
+  poll?: ComponentType<PollSlotProps>;
   catchUp?: ComponentType<CatchUpSlotProps>;
   composer?: ComponentType<ComposerSlotProps>;
 };

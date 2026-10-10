@@ -25,7 +25,8 @@ function lastLine(room: Room, me: string, typing: string[]): { text: string; typ
   const m = room.last_message;
   if (!m) return { text: 'No messages yet', typing: false };
   const who = m.user === me ? 'You' : m.user;
-  return { text: `${who}: ${m.deleted ? 'Message deleted' : preview(m.text, 60)}`, typing: false };
+  const text = m.deleted ? 'Message deleted' : m.poll ? `Poll: ${preview(m.text, 54)}` : preview(m.text, 60);
+  return { text: `${who}: ${text}`, typing: false };
 }
 
 export function Sidebar({ me, rooms, activeRoom, online, typing, onOpen, onCreate, onSwitchIdentity }: Props) {

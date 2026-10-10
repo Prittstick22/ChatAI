@@ -5,6 +5,11 @@ room as a `nudge` event. The web app shows it as a card in the conversation.
 main.post_message schedules after_message() as a background task once a message is
 saved and broadcast, so it never delays sending. The AI never writes to the database:
 a person approves any poll or calendar event.
+
+When the group changes a plan, the AI proposes the event again with the new time and
+cites the earlier messages too. A new event that shares a source message with one
+already shown replaces it: it carries `replaces` (the old proposal id) and
+`previous_start_at`, so the card can say what moved.
 """
 
 import asyncio
@@ -29,6 +34,7 @@ class Nudger:
         self.latest: dict[str, int] = {}  # room -> newest message id seen
         self.analysed: dict[str, int] = {}  # room -> highest id already analysed
         self.sent: dict[str, set[str]] = {}  # room -> proposal ids already pushed
+        self.events: dict[str, list[dict]] = {}  # room -> event proposals on screen
         self.locks: dict[str, asyncio.Lock] = {}
 
     async def after_message(self, message: dict) -> None:
@@ -46,10 +52,14 @@ class Nudger:
     async def _analyse(self, room: str) -> None:
         history = store.recent_for_ai(room, CONTEXT)
         since = self.analysed.get(room, 0)
-        new_ids = [m["id"] for m in history if m["id"] > since]
+        fresh = [m for m in history if m["id"] > since]
+        if not fresh:
+            return
+        self.analysed[room] = fresh[-1]["id"]
+        # A poll message is context: the group already has that poll.
+        new_ids = [m["id"] for m in fresh if not m.get("poll_id")]
         if not new_ids:
             return
-        self.analysed[room] = new_ids[-1]
         result = await self.ask(
             "/suggest",
             {"messages": history, "new_message_ids": new_ids},
@@ -60,10 +70,25 @@ class Nudger:
         for proposal in result.get("proposals") or []:
             if not _valid(proposal, known) or proposal["id"] in sent:
                 continue
+            if proposal["type"] == "event":
+                self._replace_changed_plan(room, proposal)
             sent.add(proposal["id"])
             await self.hub.broadcast(
                 {"type": "nudge", "room": room, "nudge": proposal}, room=room
             )
+
+    def _replace_changed_plan(self, room: str, proposal: dict) -> None:
+        events = self.events.setdefault(room, [])
+        cited = set(proposal["source_message_ids"])
+        for old in reversed(events):
+            if cited & set(old["source_message_ids"]):
+                proposal["replaces"] = old["id"]
+                proposal["previous_start_at"] = old.get("start_at")
+                events.remove(old)
+                # The plan may move back to the old time later.
+                self.sent[room].discard(old["id"])
+                break
+        events.append(proposal)
 
 
 def _valid(proposal: object, known: set[int]) -> bool:

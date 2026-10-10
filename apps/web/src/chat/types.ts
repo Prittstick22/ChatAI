@@ -16,6 +16,8 @@ export type Message = {
   edited_at?: string | null;
   deleted?: boolean;
   reactions?: Reaction[];
+  /** Set when the message is a poll posted into the conversation; live results. */
+  poll?: Poll | null;
   /** Only on POST responses and live events: the id the sender attached. */
   client_id?: string;
 };
@@ -42,6 +44,10 @@ export type Poll = {
   created_at?: string | null;
   counts?: number[];
   votes?: Record<string, number>;
+  /** The AI proposal it was made from: a room gets one poll per proposal. */
+  proposal_id?: string | null;
+  /** The message showing it in the conversation. */
+  message_id?: number | null;
 };
 
 /** A /search result: a Message plus which search found it and, for keyword hits,
@@ -53,7 +59,7 @@ export type SearchResult = Message & {
 
 export type SearchResponse = { results: SearchResult[]; mode: 'semantic' | 'keyword' | string };
 
-/** Structured AI proposal (docs/CONTRACT_V1.md). Not produced by any service yet. */
+/** Structured AI proposal (docs/CONTRACT_V1.md), pushed as a `nudge` event. */
 export type Proposal = {
   id: string;
   type: 'event' | 'poll' | string;
@@ -66,6 +72,9 @@ export type Proposal = {
   needs_confirmation?: boolean;
   start_at?: string | null;
   timezone?: string;
+  /** A changed plan: the id of the event card this one replaces, and its time. */
+  replaces?: string;
+  previous_start_at?: string | null;
 };
 
 /** One line of a structured summary, with the messages it came from. */

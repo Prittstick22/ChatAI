@@ -2,7 +2,7 @@
 // of the main layout. Replace it in main.tsx with the features/ panels when they land.
 import { CalendarPlusIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { InsightsSlotProps, InsightsTab } from '../chat/slots';
 import type { Poll, SearchResponse, SearchResult, Summary } from '../chat/types';
 import { SummarySkeleton, SummaryView, type SummaryTab } from './SummaryView';
@@ -137,7 +137,7 @@ function Search({ room, api, onJump }: InsightsSlotProps) {
   );
 }
 
-function Actions({ room, me, api }: InsightsSlotProps) {
+function Actions({ room, me, api, messages }: InsightsSlotProps) {
   const [suggestion, setSuggestion] = useState<Async<string>>({ state: 'idle' });
   const [polls, setPolls] = useState<Poll[]>([]);
   const [question, setQuestion] = useState('');
@@ -151,6 +151,13 @@ function Actions({ room, me, api }: InsightsSlotProps) {
     setSuggestion({ state: 'idle' });
     refresh();
   }, [refresh]);
+  // Polls in the loaded conversation update live; the fetched list covers older ones.
+  const live = useMemo(() => new Map(messages.flatMap((m) => (m.poll ? [[m.poll.id, m.poll] as const] : []))), [messages]);
+  const unlisted = [...live.keys()].some((id) => !polls.some((p) => p.id === id));
+  useEffect(() => {
+    if (unlisted) refresh();
+  }, [unlisted, refresh]);
+  const shown = polls.map((p) => live.get(p.id) ?? p);
 
   const suggest = async () => {
     setSuggestion({ state: 'busy' });
@@ -197,8 +204,8 @@ function Actions({ room, me, api }: InsightsSlotProps) {
       </a>
 
       <h3 className="panel-heading">Polls</h3>
-      {polls.length === 0 && <p className="panel-note">No polls in {room.name} yet.</p>}
-      {polls.map((poll) => {
+      {shown.length === 0 && <p className="panel-note">No polls in {room.name} yet.</p>}
+      {shown.map((poll) => {
         const total = (poll.counts ?? []).reduce((a, b) => a + b, 0);
         const mine = poll.votes?.[me];
         return (
