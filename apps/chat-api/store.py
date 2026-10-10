@@ -243,8 +243,10 @@ def delete_message(message_id: int, user: str) -> dict:
     with closing(connect()) as db:
         _own_live_message(db, message_id, user)
         with db:
+            # Erase the text too, so "delete for everyone" doesn't leave it in the file.
             db.execute(
-                "UPDATE messages SET deleted_at = ? WHERE id = ?", (now(), message_id)
+                "UPDATE messages SET text = '', deleted_at = ? WHERE id = ?",
+                (now(), message_id),
             )
             db.execute("DELETE FROM reactions WHERE message_id = ?", (message_id,))
         return _get(db, message_id)

@@ -119,6 +119,11 @@ def test_deleting_a_parent_updates_reply_previews(client):
     parent = post(client, "secret plan")
     reply = post(client, "ok", user="Sam", reply_to=parent["id"])
     client.delete(f"/messages/{parent['id']}?user=Alex")
+    with sqlite3.connect(store.db_path()) as db:
+        stored = db.execute(
+            "SELECT text FROM messages WHERE id = ?", (parent["id"],)
+        ).fetchone()
+    assert stored == ("",), "deleted text must not stay in the database"
     listed = {m["id"]: m for m in client.get("/messages").json()}
     assert listed[reply["id"]]["reply_preview"] == {
         "id": parent["id"],
