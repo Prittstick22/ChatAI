@@ -199,6 +199,7 @@ def build_graph(model):
         options = []
         for option in draft.options:
             option = option.strip()[:60]
+            option = option[:1].upper() + option[1:]  # "ramen" -> "Ramen"
             if option and option.lower() not in {o.lower() for o in options}:
                 options.append(option)
         question = draft.question.strip()[:120]

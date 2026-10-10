@@ -741,3 +741,29 @@ def test_poll_messages_are_context_for_nudges(client):
     b = post(client, "voted")
     wait_for(lambda: len(calls) == 2)
     assert calls == [[a["id"]], [b["id"]]]
+
+
+def test_a_poll_that_gains_an_option_replaces_its_card(client):
+    answers = []
+
+    async def fake_ask(path, payload, fallback):
+        return {"proposals": [answers.pop(0)]}
+
+    main.app.state.nudger.ask = fake_ask
+    with client.websocket_connect("/ws?user=Sam&room=demo") as ws:
+        a = post(client, "pizza or tacos?")
+        answers.append(
+            {**POLL, "id": "poll-pizza-tacos", "source_message_ids": [a["id"]]}
+        )
+        first = receive(ws, "nudge")["nudge"]
+        b = post(client, "or ramen", user="Sam")
+        answers.append(
+            {
+                **POLL,
+                "id": "poll-pizza-ramen-tacos",
+                "options": ["Pizza", "Tacos", "Ramen"],
+                "source_message_ids": [a["id"], b["id"]],
+            }
+        )
+        grown = receive(ws, "nudge")["nudge"]
+    assert grown["replaces"] == first["id"] and "previous_start_at" not in grown

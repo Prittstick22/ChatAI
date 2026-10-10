@@ -7,8 +7,9 @@ saved and broadcast, so it never delays sending. The AI never writes to the data
 a person approves any poll or calendar event.
 
 When the group changes a plan, the AI proposes the event again with the new time and
-cites the earlier messages too. A new event that shares a source message with one
-already shown replaces it: it carries `replaces` (the old proposal id) and
+cites the earlier messages too; when someone adds an option, the poll comes back with
+it. A proposal that shares a source message with one of the same type already shown
+replaces it: it carries `replaces` (the old proposal id), and an event also carries
 `previous_start_at`, so the card can say what moved.
 """
 
@@ -34,7 +35,7 @@ class Nudger:
         self.latest: dict[str, int] = {}  # room -> newest message id seen
         self.analysed: dict[str, int] = {}  # room -> highest id already analysed
         self.sent: dict[str, set[str]] = {}  # room -> proposal ids already pushed
-        self.events: dict[str, list[dict]] = {}  # room -> event proposals on screen
+        self.shown: dict[str, list[dict]] = {}  # room -> proposals on screen
         self.locks: dict[str, asyncio.Lock] = {}
 
     async def after_message(self, message: dict) -> None:
@@ -70,25 +71,27 @@ class Nudger:
         for proposal in result.get("proposals") or []:
             if not _valid(proposal, known) or proposal["id"] in sent:
                 continue
-            if proposal["type"] == "event":
-                self._replace_changed_plan(room, proposal)
+            self._replace_earlier(room, proposal)
             sent.add(proposal["id"])
             await self.hub.broadcast(
                 {"type": "nudge", "room": room, "nudge": proposal}, room=room
             )
 
-    def _replace_changed_plan(self, room: str, proposal: dict) -> None:
-        events = self.events.setdefault(room, [])
+    def _replace_earlier(self, room: str, proposal: dict) -> None:
+        shown = self.shown.setdefault(room, [])
         cited = set(proposal["source_message_ids"])
-        for old in reversed(events):
-            if cited & set(old["source_message_ids"]):
+        for old in reversed(shown):
+            if old["type"] == proposal["type"] and cited & set(
+                old["source_message_ids"]
+            ):
                 proposal["replaces"] = old["id"]
-                proposal["previous_start_at"] = old.get("start_at")
-                events.remove(old)
+                if proposal["type"] == "event":
+                    proposal["previous_start_at"] = old.get("start_at")
+                shown.remove(old)
                 # The plan may move back to the old time later.
                 self.sent[room].discard(old["id"])
                 break
-        events.append(proposal)
+        shown.append(proposal)
 
 
 def _valid(proposal: object, known: set[int]) -> bool:
