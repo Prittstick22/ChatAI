@@ -509,6 +509,102 @@ def test_nudges_wait_for_a_quiet_moment(client):
     )
 
 
+def stub_summaries(answer="Lunch is pizza on Saturday."):
+    summariser = main.app.state.summariser
+    calls = []
+
+    async def fake_ask(path, payload, fallback):
+        assert path == "/digest"
+        calls.append([m["id"] for m in payload["messages"]])
+        return {"summary": answer} if answer else fallback
+
+    summariser.ask = fake_ask
+    return summariser, calls
+
+
+def test_summary_after_ten_new_messages(client):
+    summariser, calls = stub_summaries()
+    summariser.quiet = 60  # only the message count can trigger here
+    assert client.get("/rooms/demo/summary").json() == {"summary": None}
+    with client.websocket_connect("/ws?user=Sam&room=demo") as ws:
+        sent = [post(client, f"message {i}") for i in range(1, 11)]
+        event = receive(ws, "summary", limit=40)
+    assert len(calls) == 1 and calls[0] == [m["id"] for m in sent]
+    summary = event["summary"]
+    assert event["room"] == "demo" and summary["text"] == "Lunch is pizza on Saturday."
+    assert summary["upto_message_id"] == sent[-1]["id"]
+    assert summary["message_count"] == 10 and summary["trigger"] == "messages"
+    assert client.get("/rooms/demo/summary").json() == {"summary": summary}
+
+
+def test_summary_after_a_quiet_moment(client):
+    summariser, calls = stub_summaries()
+    summariser.quiet = 0.3
+    first = [post(client, "lunch?"), post(client, "pizza", user="Sam")]
+    time.sleep(0.15)
+    assert calls == [], "still within the quiet window"
+    wait_for(lambda: calls)
+    latest = client.get("/rooms/demo/summary").json()["summary"]
+    assert latest["trigger"] == "quiet"
+    assert latest["upto_message_id"] == first[-1]["id"]
+    time.sleep(0.5)
+    assert len(calls) == 1, "no new messages, no new summary"
+    later = post(client, "sushi", user="Jordan")
+    wait_for(lambda: len(calls) == 2)
+    assert calls[1][-1] == later["id"]
+
+
+def test_ten_message_summary_isnt_repeated_when_the_room_goes_quiet(client):
+    summariser, calls = stub_summaries()
+    summariser.quiet = 0.3
+    for i in range(10):
+        post(client, f"message {i}")
+    wait_for(lambda: calls)
+    time.sleep(0.6)
+    assert len(calls) == 1
+
+
+def test_summarise_now_is_structured_and_shared(client):
+    summariser = main.app.state.summariser
+    summariser.quiet = 60
+    m = post(client, "lunch at noon?")
+
+    async def fake_ask(path, payload, fallback):
+        return {
+            "summary": "Lunch at noon.",
+            "headline": "Lunch is at **noon**.",
+            "topics": [
+                {"title": "Lunch", "points": ["noon"], "source_message_ids": [m["id"]]}
+            ],
+            "decisions": [{"text": "Noon", "source_message_ids": [m["id"]]}],
+            "actions": "not a list",
+            "questions": [{"text": "Where?", "source_message_ids": [m["id"]]}, "junk"],
+        }
+
+    summariser.ask = fake_ask
+    with client.websocket_connect("/ws?user=Sam&room=demo") as ws:
+        body = client.get("/digest").json()
+        event = receive(ws, "summary")
+    assert (
+        body["summary"] == "Lunch at noon."
+        and body["headline"] == "Lunch is at **noon**."
+    )
+    summary = event["summary"]
+    assert summary["trigger"] == "manual" and summary["text"] == "Lunch at noon."
+    assert summary["topics"][0]["title"] == "Lunch"
+    assert summary["actions"] == [] and len(summary["questions"]) == 1
+    assert client.get("/rooms/demo/summary").json()["summary"] == summary
+
+
+def test_failed_summary_is_not_kept(client):
+    summariser, calls = stub_summaries(answer=None)
+    summariser.quiet = 0
+    post(client, "hello")
+    wait_for(lambda: calls)
+    time.sleep(0.1)
+    assert client.get("/rooms/demo/summary").json() == {"summary": None}
+
+
 def test_calendar_export(client):
     r = client.get("/calendar.ics?title=Team%20meeting&date=20261010T120000Z")
     assert "BEGIN:VEVENT" in r.text and "SUMMARY:Team meeting" in r.text

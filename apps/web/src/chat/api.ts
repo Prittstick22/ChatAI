@@ -1,4 +1,4 @@
-import type { Message, Poll, Proposal, Room, SearchResponse } from './types';
+import type { Message, Poll, Proposal, Room, SearchResponse, Summary } from './types';
 
 const configured = import.meta.env.VITE_CHAT_API_URL?.trim();
 
@@ -75,7 +75,9 @@ export const chatApi = {
   react: (id: number, user: string, emoji: string) => request<Message>(`/messages/${id}/reactions`, { method: 'POST', json: { user, emoji } }),
 
   // AI gateway. The chat API answers with a fallback whenever the AI service is down.
-  digest: (room: string) => request<{ summary: string; topics?: unknown[] }>('/digest' + query({ room })),
+  summary: (room: string) => request<{ summary: Summary | null }>(`/rooms/${encodeURIComponent(room)}/summary`),
+  /** Summarise now: the result is also pushed to the room as a `summary` event. */
+  digest: (room: string) => request<{ summary: string } & Partial<Omit<Summary, 'text'>>>('/digest' + query({ room })),
   search: (text: string, room: string) => request<SearchResponse>('/search' + query({ query: text, room })),
   suggest: (room: string) => request<{ suggestion: string; proposals?: Proposal[] }>('/suggest' + query({ room })),
 
