@@ -67,6 +67,18 @@ export type Proposal = {
   timezone?: string;
 };
 
+/** Automatic catch-up summary from the chat API (summaries.py): made after 10 new
+ * messages or a quiet spell, pushed as a `summary` event. */
+export type Summary = {
+  room: string;
+  text: string;
+  /** The newest message the summary covers. */
+  upto_message_id: number;
+  message_count: number;
+  trigger: 'messages' | 'quiet' | string;
+  created_at: string;
+};
+
 export type ServerEvent =
   | { type: 'message'; message: Message }
   | { type: 'message_updated'; message: Message }
@@ -76,6 +88,7 @@ export type ServerEvent =
   | { type: 'room'; room: Room }
   | { type: 'poll'; poll: Poll }
   | { type: 'nudge'; room: string; nudge: Proposal }
+  | { type: 'summary'; room: string; summary: Summary }
   | { type: 'pong' };
 
 /** A message as the UI holds it: server data plus local delivery state. */

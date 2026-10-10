@@ -16,25 +16,55 @@ type Async<T> = { state: 'idle' } | { state: 'busy' } | { state: 'done'; value: 
 
 const message = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong.');
 
-function CatchUp({ room, api }: InsightsSlotProps) {
-  const [digest, setDigest] = useState<Async<string>>({ state: 'idle' });
-  useEffect(() => setDigest({ state: 'idle' }), [room.id]);
+const clock = (at: string | number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+function CatchUp({ room, api, summary }: InsightsSlotProps) {
+  // The chat API pushes a summary after 10 new messages or a quiet spell; "Summarise
+  // now" asks for one on demand. Whichever is newer is shown.
+  const [manual, setManual] = useState<Async<{ text: string; at: number }>>({ state: 'idle' });
+  useEffect(() => setManual({ state: 'idle' }), [room.id]);
   const run = async () => {
-    setDigest({ state: 'busy' });
+    setManual({ state: 'busy' });
     try {
-      setDigest({ state: 'done', value: (await api.digest(room.id)).summary });
+      setManual({ state: 'done', value: { text: (await api.digest(room.id)).summary, at: Date.now() } });
     } catch (e) {
-      setDigest({ state: 'error', error: message(e) });
+      setManual({ state: 'error', error: message(e) });
     }
   };
+  const pushedAt = summary ? Date.parse(summary.created_at) : 0;
+  const showManual = manual.state === 'done' && manual.value.at > pushedAt;
+  const text = showManual ? manual.value.text : summary?.text;
+  const note = showManual
+    ? `Summarised at ${clock(manual.value.at)}`
+    : summary
+      ? `Updated at ${clock(summary.created_at)}, ${summary.trigger === 'quiet' ? 'when the chat went quiet' : 'after 10 new messages'}`
+      : null;
+
   return (
     <section className="panel-section">
-      <p className="panel-lede">Get the gist of the recent conversation in {room.name}.</p>
-      <button type="button" className="button" onClick={run} disabled={digest.state === 'busy'}>
-        {digest.state === 'busy' ? 'Summarising…' : 'Summarise conversation'}
+      {text ? (
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={showManual ? `manual-${manual.state === 'done' && manual.value.at}` : summary?.created_at}
+            className="summary"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.22 }}
+          >
+            <p className="panel-note">{note}</p>
+            <p className="panel-result">{text}</p>
+          </motion.div>
+        </AnimatePresence>
+      ) : (
+        <p className="panel-lede">
+          A summary of {room.name} appears here on its own after a burst of messages, or when the chat goes quiet.
+        </p>
+      )}
+      <button type="button" className="button secondary" onClick={run} disabled={manual.state === 'busy'}>
+        {manual.state === 'busy' ? 'Summarising…' : 'Summarise now'}
       </button>
-      {digest.state === 'done' && <p className="panel-result">{digest.value}</p>}
-      {digest.state === 'error' && <p className="field-error">{digest.error}</p>}
+      {manual.state === 'error' && <p className="field-error">{manual.error}</p>}
     </section>
   );
 }

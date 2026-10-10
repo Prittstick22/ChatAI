@@ -53,7 +53,9 @@ async def digest(req: Conversation):
     text = await ask(
         "Group chat transcript:\n"
         + transcript
-        + "\nSummarise by topic. Include decisions, open questions and events. Never invent facts.",
+        + "\nSummarise by topic for someone catching up. Include decisions, open questions"
+        " and events. Never invent facts. Plain text only, no Markdown: one short line"
+        " per point, starting with the topic, e.g. 'Lunch: pizza on Saturday, Sam to book'.",
         "No AI summary available. "
         + " | ".join(m.get("text", "") for m in req.messages[-5:]),
     )

@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import type { ChatApi } from './api';
-import type { ChatMessage, Proposal, Room } from './types';
+import type { ChatMessage, Proposal, Room, Summary } from './types';
 
 /**
  * Where AI features plug into the chat UI. main.tsx passes components in; the chat
@@ -18,6 +18,8 @@ export type InsightsSlotProps = Base & {
   onTab: (tab: InsightsTab) => void;
   /** Scroll the conversation to a message and highlight it, e.g. a search result. */
   onJump: (messageId: number) => void;
+  /** Latest automatic summary of the room, updated live; undefined before the first. */
+  summary?: Summary;
 };
 export type InsightsTab = 'catchup' | 'search' | 'actions';
 
@@ -29,7 +31,7 @@ export type NudgeSlotProps = Base & {
 };
 
 /** Shown on the "new messages" divider when the room is opened with unread messages. */
-export type CatchUpSlotProps = Base & { unread: ChatMessage[] };
+export type CatchUpSlotProps = Base & { unread: ChatMessage[]; summary?: Summary };
 
 /** Row above the composer, e.g. smart reply chips. `insert` puts text in the composer. */
 export type ComposerSlotProps = Base & { messages: ChatMessage[]; insert: (text: string) => void };

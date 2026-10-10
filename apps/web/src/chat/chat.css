@@ -1392,6 +1392,13 @@
   font-size: 14px;
 }
 
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
 .panel-result {
   width: 100%;
   margin: 4px 0 0;
@@ -1717,4 +1724,20 @@
   .app.show-chat .sidebar {
     transition: none;
   }
+}
+
+/* Unseen-summary marker on the insights button. */
+.conv-actions .icon-button {
+  position: relative;
+}
+
+.button-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--canvas);
 }

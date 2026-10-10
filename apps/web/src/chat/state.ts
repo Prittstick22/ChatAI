@@ -1,4 +1,4 @@
-import type { ChatMessage, Message, Proposal, Room } from './types';
+import type { ChatMessage, Message, Proposal, Room, Summary } from './types';
 
 export type LoadState = 'loading' | 'ready' | 'error';
 
@@ -20,6 +20,8 @@ export type State = {
   typingSession: Record<string, number>;
   online: string[];
   nudges: Record<string, Proposal[]>;
+  /** room -> latest automatic summary */
+  summaries: Record<string, Summary>;
 };
 
 export const PAGE = 100;
@@ -45,7 +47,8 @@ export type Action =
   | { type: 'presence'; online: string[] }
   | { type: 'read'; room: string; user: string; messageId: number }
   | { type: 'nudge'; room: string; nudge: Proposal }
-  | { type: 'nudge/dismiss'; room: string; id: string };
+  | { type: 'nudge/dismiss'; room: string; id: string }
+  | { type: 'summary'; room: string; summary: Summary };
 
 export const initialState = (me: string): State => ({
   me,
@@ -57,6 +60,7 @@ export const initialState = (me: string): State => ({
   typingSession: {},
   online: [],
   nudges: {},
+  summaries: {},
 });
 
 /** Confirmed messages in id order, then this tab's unsent ones in the order typed. */
@@ -260,6 +264,13 @@ export function reducer(state: State, action: Action): State {
     }
     case 'nudge/dismiss':
       return { ...state, nudges: { ...state.nudges, [action.room]: (state.nudges[action.room] ?? []).filter((n) => n.id !== action.id) } };
+
+    case 'summary': {
+      // A fetch can land after a newer pushed summary; keep whichever is newer.
+      const current = state.summaries[action.room];
+      if (current && Date.parse(current.created_at) >= Date.parse(action.summary.created_at)) return state;
+      return { ...state, summaries: { ...state.summaries, [action.room]: action.summary } };
+    }
   }
 }
 
