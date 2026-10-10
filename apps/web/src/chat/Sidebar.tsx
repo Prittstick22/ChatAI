@@ -82,7 +82,7 @@ export function Sidebar({ me, rooms, activeRoom, collapsed, online, typing, onOp
     <nav className={['sidebar', collapsed && 'sidebar-collapsed', creating && 'creating-group'].filter(Boolean).join(' ')} aria-label="Rooms">
       <div className="sidebar-top">
         <div className="sidebar-brand-row">
-          <span className="wordmark">H.AI</span>
+          <img className="wordmark" src="/brand/hai-logo.png" alt="H.AI" />
           {!creating && (
             <button
               type="button"
