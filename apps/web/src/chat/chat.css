@@ -2037,6 +2037,11 @@
   box-shadow: 0 0 0 2px var(--canvas);
 }
 
+.tab-label .button-dot {
+  margin-left: -2px;
+  box-shadow: none;
+}
+
 /* ---------------------------------------------------------------- catch-up summary */
 
 .digest {

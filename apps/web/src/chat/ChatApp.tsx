@@ -56,8 +56,8 @@ function InsightTabs({
           <span className="tab-label">
             <Icon className={`insight-tab-icon insight-tab-icon-${id}`} size={id === 'search' ? 21 : 18} weight="regular" aria-hidden="true" />
             {label}
+            {id === 'catchup' && newSummary && <span className="button-dot" aria-hidden="true" />}
           </span>
-          {id === 'catchup' && newSummary && <span className="button-dot" aria-hidden="true" />}
         </button>
       ))}
     </div>
