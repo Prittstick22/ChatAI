@@ -8,7 +8,7 @@ import {
   WarningCircleIcon,
 } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
-import { forwardRef, memo, useRef, useState, type CSSProperties } from 'react';
+import { forwardRef, memo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Avatar } from './Avatar';
 import { EmojiPicker, QUICK_REACTIONS } from './EmojiPicker';
 import { fullTime, isJumboEmoji, listNames, mentions, segments, time } from './format';
@@ -43,6 +43,7 @@ type Props = {
   onSelect: (id: number | null) => void;
   onPicker: (id: number | null) => void;
   actions: RowActions;
+  renderPoll?: (message: ChatMessage) => ReactNode;
 };
 
 const spring = { type: 'spring', stiffness: 520, damping: 34, mass: 0.8 } as const;
@@ -77,7 +78,7 @@ function Quote({ preview, onJump }: { preview: ReplyPreview; onJump: () => void 
 }
 
 const MessageRowView = forwardRef<HTMLDivElement, Props>(function MessageRowView(
-  { message: m, me, room, position, parent, seenBy, entering, highlighted, selected, pickerOpen, onSelect, onPicker, actions },
+  { message: m, me, room, position, parent, seenBy, entering, highlighted, selected, pickerOpen, onSelect, onPicker, actions, renderPoll },
   ref,
 ) {
   const mine = m.user === me;
@@ -85,7 +86,8 @@ const MessageRowView = forwardRef<HTMLDivElement, Props>(function MessageRowView
   const pointer = useRef('mouse');
   const confirmed = m.id > 0;
   const live = confirmed && !m.deleted;
-  const jumbo = !m.deleted && isJumboEmoji(m.text);
+  const poll = m.poll && !m.deleted && renderPoll ? renderPoll(m) : null;
+  const jumbo = !m.deleted && !poll && isJumboEmoji(m.text);
   const showName = !mine && (position === 'single' || position === 'first');
   const showAvatar = !mine && (position === 'single' || position === 'last');
   const preview: ReplyPreview | null | undefined = parent
@@ -105,7 +107,7 @@ const MessageRowView = forwardRef<HTMLDivElement, Props>(function MessageRowView
   ].filter(Boolean).join(' ');
 
   const morph = entering ? m.morph : undefined;
-  const bubbleClass = ['bubble', jumbo && 'jumbo', m.deleted && 'deleted', m.status === 'failed' && 'failed', morph && 'morphing']
+  const bubbleClass = ['bubble', poll && 'poll-bubble', jumbo && 'jumbo', m.deleted && 'deleted', m.status === 'failed' && 'failed', morph && 'morphing']
     .filter(Boolean)
     .join(' ');
 
@@ -143,6 +145,8 @@ const MessageRowView = forwardRef<HTMLDivElement, Props>(function MessageRowView
             {preview && !m.deleted && <Quote preview={preview} onJump={() => actions.jump(preview.id)} />}
             {m.deleted ? (
               <p className="text">Message deleted</p>
+            ) : poll ? (
+              poll
             ) : (
               <p className="text">
                 <Text text={m.text} me={me} />
@@ -187,9 +191,11 @@ const MessageRowView = forwardRef<HTMLDivElement, Props>(function MessageRowView
                   </button>
                   {mine && (
                     <>
-                      <button type="button" className="tool" aria-label="Edit" onClick={() => actions.edit(m)}>
-                        <PencilSimpleIcon size={18} />
-                      </button>
+                      {!m.poll && (
+                        <button type="button" className="tool" aria-label="Edit" onClick={() => actions.edit(m)}>
+                          <PencilSimpleIcon size={18} />
+                        </button>
+                      )}
                       <button type="button" className="tool" aria-label="Delete" onClick={() => setConfirming(true)}>
                         <TrashIcon size={18} />
                       </button>

@@ -55,7 +55,7 @@ function query(params: Record<string, string | number | null | undefined>): stri
 }
 
 export type NewMessage = { room: string; user: string; text: string; reply_to?: number | null; client_id?: string };
-export type NewPoll = { question: string; options: string[]; room?: string; created_by?: string };
+export type NewPoll = { question: string; options: string[]; room?: string; created_by?: string; proposal_id?: string };
 export type NewRoom = { name: string; created_by: string; members: string[] };
 
 export const chatApi = {

@@ -21,6 +21,8 @@ type Props = {
   onRetry: () => void;
   onAtBottom: (atBottom: boolean) => void;
   renderCatchUp?: (unread: ChatMessage[]) => ReactNode;
+  /** Renders a poll message's card; without it a poll shows as its question. */
+  renderPoll?: (message: ChatMessage) => ReactNode;
   /** Cards to show after a given message id (or at the end, keyed by 'end'). */
   inserts: Map<number | 'end', ReactNode[]>;
 };
@@ -34,7 +36,7 @@ type Item =
 const PIN_GAP = 72;
 
 export function MessageList(props: Props) {
-  const { room, me, messages, history, typing, unreadAfter, highlight, actions, onLoadOlder, onRetry, onAtBottom, renderCatchUp, inserts } = props;
+  const { room, me, messages, history, typing, unreadAfter, highlight, actions, onLoadOlder, onRetry, onAtBottom, renderCatchUp, renderPoll, inserts } = props;
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const topSentinel = useRef<HTMLDivElement>(null);
@@ -290,6 +292,7 @@ export function MessageList(props: Props) {
                 onSelect={setSelected}
                 onPicker={setPicker}
                 actions={actions}
+                renderPoll={renderPoll}
               />
             );
           })}

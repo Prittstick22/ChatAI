@@ -41,6 +41,8 @@ Look only for something raised in the messages marked NEW; older messages are co
 - poll: the group is choosing between two or more concrete options and hasn't settled ("pizza or sushi?", people suggesting different venues).
 - none: anything else, including plans in the past, vague ideas with no time or options, and questions one person can just answer.
 
+An event also covers a change to a plan: a new time, or the agreed time no longer working. A "[Poll]" message is a poll the group already has: never suggest that choice again.
+
 When unsure, answer none: a wrong suggestion costs more than a missed one."""
 
 EVENT_PROMPT = f"""Turn the plan the group is making into a calendar event. {UNTRUSTED} Never invent a place, time or person.
@@ -49,7 +51,8 @@ EVENT_PROMPT = f"""Turn the plan the group is making into a calendar event. {UNT
 - description: one short sentence on what was said, e.g. "Sam suggested noon and Alex agreed."
 - day: "today", "tomorrow", a lowercase weekday ("saturday"), or YYYY-MM-DD if a calendar date was stated. null if no day was mentioned.
 - time: 24-hour HH:MM. "noon" is 12:00, "3pm" is 15:00. null if no clock time was mentioned, or am/pm is unclear.
-- source_message_ids: ids of the messages that state the plan.
+- When the plan changed, use the latest day and time; if the agreed time no longer works and no new one is agreed, time is null.
+- source_message_ids: ids of every message about this plan, including earlier ones it changes.
 - confidence: 0 to 1, how sure you are the group intends this."""
 
 POLL_PROMPT = f"""Turn the open choice the group is discussing into a poll. {UNTRUSTED}

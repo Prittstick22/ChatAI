@@ -1,4 +1,4 @@
-import type { ChatMessage, Message, Proposal, Room, Summary } from './types';
+import type { ChatMessage, Message, Poll, Proposal, Room, Summary } from './types';
 
 export type LoadState = 'loading' | 'ready' | 'error';
 
@@ -48,6 +48,7 @@ export type Action =
   | { type: 'typing/expire'; now: number }
   | { type: 'presence'; online: string[] }
   | { type: 'read'; room: string; user: string; messageId: number }
+  | { type: 'poll'; poll: Poll }
   | { type: 'nudge'; room: string; nudge: Proposal }
   | { type: 'nudge/dismiss'; room: string; id: string }
   | { type: 'summary'; room: string; summary: Summary };
@@ -187,6 +188,11 @@ export function reducer(state: State, action: Action): State {
         typing: stopTyping(state.typing, room, message.user),
         messages: list ? { ...state.messages, [room]: upsert(list, incoming) } : state.messages,
       };
+      // Someone made the poll a suggestion proposed: the suggestion is done, in every tab.
+      const made = message.poll?.proposal_id;
+      if (made && next.nudges[room]?.some((n) => n.id === made)) {
+        next = { ...next, nudges: { ...next.nudges, [room]: next.nudges[room].filter((n) => n.id !== made) } };
+      }
       next = withRoom(next, room, (r) => {
         const isNew = !known && message.id > (r.last_message?.id ?? 0);
         return {
@@ -262,8 +268,18 @@ export function reducer(state: State, action: Action): State {
       });
     }
 
+    case 'poll': {
+      const { poll } = action;
+      const room = poll.room ?? '';
+      const list = state.messages[room];
+      if (!list?.some((m) => m.poll?.id === poll.id)) return state;
+      return { ...state, messages: { ...state.messages, [room]: list.map((m) => (m.poll?.id === poll.id ? { ...m, poll } : m)) } };
+    }
+
     case 'nudge': {
-      const current = (state.nudges[action.room] ?? []).filter((n) => n.id !== action.nudge.id);
+      // A changed plan replaces the card for the old one.
+      const { id, replaces } = action.nudge;
+      const current = (state.nudges[action.room] ?? []).filter((n) => n.id !== id && n.id !== replaces);
       return { ...state, nudges: { ...state.nudges, [action.room]: [...current, action.nudge] } };
     }
     case 'nudge/dismiss':

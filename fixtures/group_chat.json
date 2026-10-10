@@ -1,0 +1,43 @@
+{
+  "room_name": "Weekend Plans",
+  "created_by": "Alex",
+  "members": ["Sam", "Jordan", "Taylor"],
+  "seed_marker": "Made this group so we can plan Saturday without losing the details.",
+  "messages": [
+    {"user": "Alex", "text": "Made this group so we can plan Saturday without losing the details."},
+    {"user": "Sam", "text": "Good idea. Is everyone around next Saturday?"},
+    {"user": "Jordan", "text": "I should be free after lunch."},
+    {"user": "Taylor", "text": "Saturday works for me too."},
+    {"user": "Alex", "text": "How about meeting at 2 pm on Saturday 17 October?"},
+    {"user": "Sam", "text": "That time works for me."},
+    {"user": "Jordan", "text": "2 pm is good. I might be a few minutes late."},
+    {"user": "Taylor", "text": "Count me in for 2 pm."},
+    {"user": "Alex", "text": "Great, Saturday 17 October at 2 pm it is."},
+    {"user": "Sam", "text": "Where should we meet? The park could be nice if it stays dry."},
+    {"user": "Jordan", "text": "We could meet by the clock tower at Mile End Park."},
+    {"user": "Taylor", "text": "There is a cafe nearby if the weather turns."},
+    {"user": "Alex", "text": "Let's meet at the park entrance and decide from there."},
+    {"user": "Sam", "text": "I can check the forecast on Friday and message everyone."},
+    {"user": "Jordan", "text": "For food, should we get pizza or tacos afterward?"},
+    {"user": "Taylor", "text": "Tacos sound great, but pizza is easier for sharing."},
+    {"user": "Alex", "text": "I'm happy with either. Let's leave the food choice open for now."},
+    {"user": "Sam", "text": "Could we keep it around 15 pounds each?"},
+    {"user": "Jordan", "text": "That budget works for me."},
+    {"user": "Taylor", "text": "Same here. I can bring a deck of cards."},
+    {"user": "Alex", "text": "I'll bring a picnic blanket and a couple of reusable cups."},
+    {"user": "Sam", "text": "I have a frisbee we can bring along."},
+    {"user": "Jordan", "text": "I can look up the cafe opening hours as a rainy-day backup."},
+    {"user": "Taylor", "text": "I'll make a short playlist for the walk over."},
+    {"user": "Alex", "text": "If anyone is running late, just post here and we'll wait near the entrance."},
+    {"user": "Sam", "text": "Sounds good. I'll send the weather update Friday afternoon."},
+    {"user": "Jordan", "text": "I checked the map. The park entrance is a short walk from the station."},
+    {"user": "Taylor", "text": "Nice. We can grab food after we've had a walk."},
+    {"user": "Sam", "text": "We still need to choose between pizza and tacos."},
+    {"user": "Alex", "text": "Let's vote on food in the chat before Friday so we can order ahead."}
+  ],
+  "smoke_queries": [
+    {"query": "what time are we meeting", "expected_text": "How about meeting at 2 pm on Saturday 17 October?"},
+    {"query": "where is the rainy day backup", "expected_text": "I can look up the cafe opening hours as a rainy-day backup."},
+    {"query": "what food options are undecided", "expected_text": "I'm happy with either. Let's leave the food choice open for now."}
+  ]
+}

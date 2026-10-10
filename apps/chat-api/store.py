@@ -69,6 +69,13 @@ MIGRATIONS = [
     );
     CREATE INDEX room_members_user ON room_members(user, room);
     """,
+    # 5: polls posted into the conversation as messages, and at most one poll per AI
+    # proposal in a room.
+    """
+    ALTER TABLE messages ADD COLUMN poll_id INTEGER;
+    ALTER TABLE polls ADD COLUMN proposal_id TEXT;
+    CREATE UNIQUE INDEX polls_room_proposal ON polls(room, proposal_id) WHERE proposal_id IS NOT NULL;
+    """,
 ]
 
 
@@ -122,7 +129,7 @@ def init() -> None:
 
 MESSAGE_SELECT = """
 SELECT m.id, m.room, m.user, m.text, m.created_at, m.reply_to, m.edited_at, m.deleted_at,
-       p.user AS parent_user, p.text AS parent_text, p.deleted_at AS parent_deleted_at
+       m.poll_id, p.user AS parent_user, p.text AS parent_text, p.deleted_at AS parent_deleted_at
 FROM messages m LEFT JOIN messages p ON p.id = m.reply_to
 """
 
@@ -146,7 +153,9 @@ def _reactions(db: sqlite3.Connection, ids: list[int]) -> dict[int, list[dict]]:
     }
 
 
-def _message(row: sqlite3.Row, reactions: dict[int, list[dict]]) -> dict:
+def _message(
+    row: sqlite3.Row, reactions: dict[int, list[dict]], polls: dict[int, dict]
+) -> dict:
     deleted = row["deleted_at"] is not None
     preview = None
     if row["reply_to"] is not None and row["parent_user"] is not None:
@@ -168,12 +177,20 @@ def _message(row: sqlite3.Row, reactions: dict[int, list[dict]]) -> dict:
         "edited_at": row["edited_at"],
         "deleted": deleted,
         "reactions": [] if deleted else reactions.get(row["id"], []),
+        # The poll this message shows in the conversation, if it is one.
+        "poll": None if deleted else polls.get(row["poll_id"]),
     }
 
 
 def _hydrate(db: sqlite3.Connection, rows: list[sqlite3.Row]) -> list[dict]:
     reactions = _reactions(db, [r["id"] for r in rows])
-    return [_message(r, reactions) for r in rows]
+    poll_ids = [r["poll_id"] for r in rows if r["poll_id"] is not None]
+    polls = {}
+    if poll_ids:
+        marks = ",".join("?" * len(poll_ids))
+        for p in db.execute(f"SELECT * FROM polls WHERE id IN ({marks})", poll_ids):
+            polls[p["id"]] = _poll(db, p)
+    return [_message(r, reactions, polls) for r in rows]
 
 
 def _get(db: sqlite3.Connection, message_id: int) -> dict:
@@ -218,11 +235,27 @@ def list_messages(
 
 
 def recent_for_ai(room: str, limit: int = PAGE_LIMIT) -> list[dict]:
-    """Recent visible messages in the stable v1 Message shape the AI service expects."""
+    """Recent visible messages in the stable v1 Message shape the AI service expects.
+    A poll reads as its question and current results, and carries its poll_id."""
     keys = ("id", "room", "user", "text", "created_at")
-    return [
-        {k: m[k] for k in keys} for m in list_messages(room, limit) if not m["deleted"]
-    ]
+    recent = []
+    for m in list_messages(room, limit):
+        if m["deleted"]:
+            continue
+        message = {k: m[k] for k in keys}
+        if m["poll"]:
+            message["text"] = poll_text(m["poll"])
+            message["poll_id"] = m["poll"]["id"]
+        recent.append(message)
+    return recent
+
+
+def poll_text(poll: dict) -> str:
+    results = ", ".join(
+        f"{option} ({count} vote{'' if count == 1 else 's'})"
+        for option, count in zip(poll["options"], poll["counts"])
+    )
+    return f"[Poll] {poll['question']} Options: {results}"
 
 
 def get_messages(room: str, ids: list[int]) -> list[dict]:
@@ -318,7 +351,7 @@ def _own_live_message(
     db: sqlite3.Connection, message_id: int, user: str
 ) -> sqlite3.Row:
     row = db.execute(
-        "SELECT user, deleted_at FROM messages WHERE id = ?", (message_id,)
+        "SELECT user, deleted_at, poll_id FROM messages WHERE id = ?", (message_id,)
     ).fetchone()
     if row is None:
         raise NotFound("Message not found")
@@ -331,7 +364,8 @@ def _own_live_message(
 
 def edit_message(message_id: int, user: str, text: str) -> dict:
     with closing(connect()) as db:
-        _own_live_message(db, message_id, user)
+        if _own_live_message(db, message_id, user)["poll_id"] is not None:
+            raise Invalid("A poll can't be edited")
         with db:
             db.execute(
                 "UPDATE messages SET text = ?, edited_at = ? WHERE id = ?",
@@ -469,9 +503,7 @@ def create_room(
             )
             if members is not None:
                 participants = list(
-                    dict.fromkeys(
-                        ([created_by] if created_by else []) + members
-                    )
+                    dict.fromkeys(([created_by] if created_by else []) + members)
                 )
                 db.executemany(
                     "INSERT INTO room_members(room, user) VALUES (?, ?)",
@@ -521,6 +553,9 @@ def _poll(db: sqlite3.Connection, row: sqlite3.Row) -> dict:
             "SELECT user, option_index FROM votes WHERE poll_id = ?", (row["id"],)
         )
     }
+    message = db.execute(
+        "SELECT id FROM messages WHERE poll_id = ?", (row["id"],)
+    ).fetchone()
     counts = [0] * len(options)
     for index in votes.values():
         if 0 <= index < len(counts):
@@ -534,6 +569,9 @@ def _poll(db: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "created_at": row["created_at"],
         "counts": counts,
         "votes": votes,
+        # The AI proposal it was made from, and the message showing it in the chat.
+        "proposal_id": row["proposal_id"],
+        "message_id": message["id"] if message else None,
     }
 
 
@@ -549,18 +587,41 @@ def list_polls(room: str | None = None) -> list[dict]:
 
 
 def create_poll(
-    question: str, options: list[str], room: str, created_by: str | None
-) -> dict:
+    question: str,
+    options: list[str],
+    room: str,
+    created_by: str | None,
+    proposal_id: str | None = None,
+) -> tuple[dict, dict | None]:
+    """Create a poll and the message that shows it in the conversation. A room gets one
+    poll per AI proposal: asking again returns the existing poll and no message."""
     with closing(connect()) as db:
-        with db:
-            cur = db.execute(
-                "INSERT INTO polls(question, options, room, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
-                (question, json.dumps(options), room, created_by, now()),
-            )
-        return _poll(
-            db,
-            db.execute("SELECT * FROM polls WHERE id = ?", (cur.lastrowid,)).fetchone(),
-        )
+        try:
+            with db:
+                cur = db.execute(
+                    "INSERT INTO polls(question, options, room, created_by, created_at, proposal_id) VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        question,
+                        json.dumps(options),
+                        room,
+                        created_by,
+                        now(),
+                        proposal_id,
+                    ),
+                )
+                poll_id = cur.lastrowid
+                cur = db.execute(
+                    "INSERT INTO messages(room, user, text, created_at, poll_id) VALUES (?, ?, ?, ?, ?)",
+                    (room, created_by or "Someone", question, now(), poll_id),
+                )
+        except sqlite3.IntegrityError:
+            row = db.execute(
+                "SELECT * FROM polls WHERE room = ? AND proposal_id = ?",
+                (room, proposal_id),
+            ).fetchone()
+            return _poll(db, row), None
+        message = _get(db, cur.lastrowid)
+        return message["poll"], message
 
 
 def vote(poll_id: int, user: str, option_index: int) -> dict:
