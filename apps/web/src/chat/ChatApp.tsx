@@ -309,9 +309,9 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
       case 'room':
         dispatch({ type: 'room/upsert', room: event.room });
         break;
-      case 'room_deleted':
-        dispatch({ type: 'room/deleted', room: event.room });
-        if (open === event.room) {
+      case 'room_member_left':
+        dispatch({ type: 'room/left', room: event.room, user: event.user });
+        if (event.user === who && open === event.room) {
           setReplyTo(null);
           setEditing(null);
           setHighlight(null);
@@ -470,10 +470,10 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
     openRoom(created.id);
   };
 
-  const deleteRoom = async (id: string) => {
+  const leaveRoom = async (id: string) => {
     try {
-      await chatApi.deleteRoom(id, me);
-      dispatch({ type: 'room/deleted', room: id });
+      await chatApi.leaveRoom(id, me);
+      dispatch({ type: 'room/left', room: id, user: me });
     } catch (e) {
       toast(errorText(e));
       throw e;
@@ -595,7 +595,7 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
         onOpen={openRoom}
         onCreate={createRoom}
         onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
-        onDelete={deleteRoom}
+        onLeave={leaveRoom}
         onSwitchIdentity={onSwitchIdentity}
       />
 

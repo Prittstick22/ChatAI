@@ -80,6 +80,15 @@ MIGRATIONS = [
     """
     CREATE TABLE deleted_rooms(room TEXT PRIMARY KEY, deleted_at TEXT NOT NULL);
     """,
+    # 7: a user can leave a chat without deleting it for the other members.
+    """
+    CREATE TABLE room_leaves(
+        room TEXT NOT NULL,
+        user TEXT NOT NULL,
+        left_at TEXT NOT NULL,
+        PRIMARY KEY(room, user)
+    );
+    """,
 ]
 
 
@@ -102,6 +111,13 @@ class Invalid(Exception):
 def _assert_room_not_deleted(db: sqlite3.Connection, room: str) -> None:
     if db.execute("SELECT 1 FROM deleted_rooms WHERE room = ?", (room,)).fetchone():
         raise NotFound("Chat not found")
+
+
+def _assert_user_has_not_left(db: sqlite3.Connection, room: str, user: str) -> None:
+    if db.execute(
+        "SELECT 1 FROM room_leaves WHERE room = ? AND user = ?", (room, user)
+    ).fetchone():
+        raise Forbidden("You have left this chat")
 
 
 def db_path() -> str:
@@ -343,6 +359,7 @@ def create_message(
 ) -> dict:
     with closing(connect()) as db:
         _assert_room_not_deleted(db, room)
+        _assert_user_has_not_left(db, room, user)
         if reply_to is not None:
             parent = db.execute(
                 "SELECT room FROM messages WHERE id = ?", (reply_to,)
@@ -361,12 +378,14 @@ def _own_live_message(
     db: sqlite3.Connection, message_id: int, user: str
 ) -> sqlite3.Row:
     row = db.execute(
-        "SELECT user, deleted_at, poll_id FROM messages WHERE id = ?", (message_id,)
+        "SELECT user, room, deleted_at, poll_id FROM messages WHERE id = ?",
+        (message_id,),
     ).fetchone()
     if row is None:
         raise NotFound("Message not found")
     if row["deleted_at"] is not None:
         raise Conflict("This message was deleted")
+    _assert_user_has_not_left(db, row["room"], user)
     if row["user"] != user:
         raise Forbidden("Only the sender can change this message")
     return row
@@ -400,12 +419,13 @@ def delete_message(message_id: int, user: str) -> dict:
 def toggle_reaction(message_id: int, user: str, emoji: str) -> dict:
     with closing(connect()) as db:
         row = db.execute(
-            "SELECT deleted_at FROM messages WHERE id = ?", (message_id,)
+            "SELECT room, deleted_at FROM messages WHERE id = ?", (message_id,)
         ).fetchone()
         if row is None:
             raise NotFound("Message not found")
         if row["deleted_at"] is not None:
             raise Conflict("This message was deleted")
+        _assert_user_has_not_left(db, row["room"], user)
         with db:
             removed = db.execute(
                 "DELETE FROM reactions WHERE message_id = ? AND user = ? AND emoji = ?",
@@ -456,7 +476,11 @@ def _room(db: sqlite3.Connection, row: sqlite3.Row, user: str | None) -> dict:
         "members": [
             r["user"]
             for r in db.execute(
-                "SELECT user FROM room_members WHERE room = ? ORDER BY rowid",
+                """SELECT rm.user FROM room_members rm
+                   WHERE rm.room = ? AND NOT EXISTS (
+                       SELECT 1 FROM room_leaves rl
+                       WHERE rl.room = rm.room AND rl.user = rm.user
+                   ) ORDER BY rm.rowid""",
                 (room_id,),
             )
         ],
@@ -478,14 +502,19 @@ def list_rooms(user: str | None = None) -> list[dict]:
         params: tuple[str, ...] = ()
         if user:
             query += """
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM room_members rm WHERE rm.room = rooms.id
-                ) OR EXISTS (
-                    SELECT 1 FROM room_members rm
-                    WHERE rm.room = rooms.id AND rm.user = ?
+                WHERE (
+                    NOT EXISTS (
+                        SELECT 1 FROM room_members rm WHERE rm.room = rooms.id
+                    ) OR EXISTS (
+                        SELECT 1 FROM room_members rm
+                        WHERE rm.room = rooms.id AND rm.user = ?
+                    )
+                ) AND NOT EXISTS (
+                    SELECT 1 FROM room_leaves rl
+                    WHERE rl.room = rooms.id AND rl.user = ?
                 )
             """
-            params = (user,)
+            params = (user, user)
         rooms = [_room(db, row, user) for row in db.execute(query, params)]
     return sorted(
         rooms, key=lambda r: (r["last_message"] or r)["created_at"], reverse=True
@@ -533,35 +562,37 @@ def create_room(
         )
 
 
-def delete_room(room_id: str, user: str) -> None:
-    """Permanently delete a room and its data when requested by its creator."""
+def leave_room(room_id: str, user: str) -> None:
+    """Hide a room from one member without removing it or its history."""
     with closing(connect()) as db:
         with db:
             room = db.execute(
-                "SELECT created_by FROM rooms WHERE id = ?", (room_id,)
+                "SELECT id FROM rooms WHERE id = ?", (room_id,)
             ).fetchone()
             if room is None:
                 raise NotFound("Chat not found")
-            if room["created_by"] is None or room["created_by"] != user:
-                raise Forbidden("Only the chat creator can delete this chat")
+            if db.execute(
+                "SELECT 1 FROM room_leaves WHERE room = ? AND user = ?",
+                (room_id, user),
+            ).fetchone():
+                raise NotFound("You have already left this chat")
+
+            has_members = db.execute(
+                "SELECT 1 FROM room_members WHERE room = ? LIMIT 1", (room_id,)
+            ).fetchone()
+            if (
+                has_members
+                and not db.execute(
+                    "SELECT 1 FROM room_members WHERE room = ? AND user = ?",
+                    (room_id, user),
+                ).fetchone()
+            ):
+                raise Forbidden("You are not a member of this chat")
 
             db.execute(
-                "INSERT INTO deleted_rooms(room, deleted_at) VALUES (?, ?)",
-                (room_id, now()),
+                "INSERT INTO room_leaves(room, user, left_at) VALUES (?, ?, ?)",
+                (room_id, user, now()),
             )
-            db.execute(
-                "DELETE FROM votes WHERE poll_id IN (SELECT id FROM polls WHERE room = ?)",
-                (room_id,),
-            )
-            db.execute(
-                "DELETE FROM reactions WHERE message_id IN (SELECT id FROM messages WHERE room = ?)",
-                (room_id,),
-            )
-            db.execute("DELETE FROM messages WHERE room = ?", (room_id,))
-            db.execute("DELETE FROM polls WHERE room = ?", (room_id,))
-            db.execute("DELETE FROM reads WHERE room = ?", (room_id,))
-            db.execute("DELETE FROM room_members WHERE room = ?", (room_id,))
-            db.execute("DELETE FROM rooms WHERE id = ?", (room_id,))
 
 
 def mark_read(room: str, user: str, message_id: int) -> tuple[int, bool]:
@@ -569,6 +600,7 @@ def mark_read(room: str, user: str, message_id: int) -> tuple[int, bool]:
     whether it moved."""
     with closing(connect()) as db:
         _assert_room_not_deleted(db, room)
+        _assert_user_has_not_left(db, room, user)
         latest = (
             db.execute(
                 "SELECT MAX(id) FROM messages WHERE room = ?", (room,)
@@ -646,6 +678,7 @@ def create_poll(
     poll per AI proposal: asking again returns the existing poll and no message."""
     with closing(connect()) as db:
         _assert_room_not_deleted(db, room)
+        _assert_user_has_not_left(db, room, created_by or "Someone")
         try:
             with db:
                 cur = db.execute(
@@ -679,6 +712,7 @@ def vote(poll_id: int, user: str, option_index: int) -> dict:
         row = db.execute("SELECT * FROM polls WHERE id = ?", (poll_id,)).fetchone()
         if row is None:
             raise NotFound("Poll not found")
+        _assert_user_has_not_left(db, row["room"], user)
         if not 0 <= option_index < len(json.loads(row["options"])):
             raise Invalid("Invalid option")
         with db:
@@ -707,6 +741,7 @@ TABLES = (
     "polls",
     "reactions",
     "reads",
+    "room_leaves",
     "room_members",
     "messages",
     "rooms",
@@ -744,12 +779,11 @@ def clear_room(room: str) -> None:
 
 
 def erase_room(room: str) -> None:
-    """Delete a room and everything in it, for the dev tools: no creator check, and
-    unlike delete_room its id isn't reserved, so a premade chat can be loaded again
-    under the same id."""
+    """Delete a room and everything in it, for the dev tools, without reserving its ID."""
     clear_room(room)
     with closing(connect()) as db:
         with db:
+            db.execute("DELETE FROM room_leaves WHERE room = ?", (room,))
             db.execute("DELETE FROM room_members WHERE room = ?", (room,))
             db.execute("DELETE FROM rooms WHERE id = ?", (room,))
 

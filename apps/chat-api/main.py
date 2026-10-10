@@ -182,15 +182,13 @@ async def create_room(body: NewRoom):
 
 
 @app.delete("/rooms/{room}")
-async def delete_room(
+async def leave_room(
     room: str, user: Annotated[str, Query(min_length=1, max_length=40)]
 ):
     user = user.strip()
-    store.delete_room(room, user)
-    for helper in (app.state.nudger, app.state.summariser):
-        helper.forget(room)
-    await hub.broadcast({"type": "room_deleted", "room": room})
-    return {"deleted": True, "room": room}
+    store.leave_room(room, user)
+    await hub.broadcast({"type": "room_member_left", "room": room, "user": user})
+    return {"left": True, "room": room, "user": user}
 
 
 @app.get("/rooms/{room}/summary")

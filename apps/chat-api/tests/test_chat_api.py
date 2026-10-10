@@ -261,46 +261,62 @@ def test_room_creation_without_members_keeps_legacy_visibility(client):
     )
 
 
-def test_only_creator_can_delete_owned_rooms_and_legacy_room_is_protected(client):
+def test_member_can_leave_group_without_deleting_chat(client):
     room = client.post(
         "/rooms",
         json={"name": "Weekend plan", "created_by": "Alex", "members": ["Sam"]},
     ).json()
+    message = post(client, "Let's meet at the park", room=room["id"])
+    sam_message = post(client, "I will leave the group", user="Sam", room=room["id"])
+    poll = client.post(
+        "/polls",
+        json={
+            "room": room["id"],
+            "created_by": "Alex",
+            "question": "Where should we eat?",
+            "options": ["Pizza", "Tacos"],
+        },
+    ).json()
+    client.post(
+        f"/polls/{poll['id']}/votes",
+        json={"user": "Alex", "option_index": 0},
+    )
 
-    assert client.delete(f"/rooms/{room['id']}?user=Sam").status_code == 403
-    assert client.delete("/rooms/demo?user=Alex").status_code == 403
-    assert room["id"] in {r["id"] for r in client.get("/rooms?user=Alex").json()}
-    assert client.delete(f"/rooms/{room['id']}?user=Alex").json() == {
-        "deleted": True,
+    assert client.delete(f"/rooms/{room['id']}?user=Taylor").status_code == 403
+    assert client.delete(f"/rooms/{room['id']}?user=Sam").json() == {
+        "left": True,
         "room": room["id"],
+        "user": "Sam",
     }
-    assert client.delete(f"/rooms/{room['id']}?user=Alex").status_code == 404
+    assert room["id"] not in {r["id"] for r in client.get("/rooms?user=Sam").json()}
+    assert room["id"] in {r["id"] for r in client.get("/rooms?user=Alex").json()}
+    assert client.get(f"/messages?room={room['id']}").json()[0]["id"] == message["id"]
+    assert client.get(f"/polls?room={room['id']}").json()[0]["votes"] == {"Alex": 0}
+    assert client.delete(f"/rooms/{room['id']}?user=Sam").status_code == 404
     assert (
         client.post(
             "/messages",
             json={"room": room["id"], "user": "Sam", "text": "stale send"},
         ).status_code
-        == 404
+        == 403
     )
     assert (
-        client.post(
-            "/polls",
-            json={
-                "room": room["id"],
-                "question": "Still here?",
-                "options": ["yes", "no"],
-            },
+        client.patch(
+            f"/messages/{sam_message['id']}",
+            json={"user": "Sam", "text": "still here"},
         ).status_code
-        == 404
+        == 403
     )
-    replacement = client.post(
-        "/rooms",
-        json={"name": "Weekend plan", "created_by": "Alex", "members": ["Sam"]},
-    ).json()
-    assert replacement["id"] != room["id"]
+    assert client.delete(f"/messages/{sam_message['id']}?user=Sam").status_code == 403
+    assert (
+        client.post(
+            f"/messages/{message['id']}/reactions", json={"user": "Sam", "emoji": "👍"}
+        ).status_code
+        == 403
+    )
 
 
-def test_delete_room_removes_all_data_and_notifies_every_client(client):
+def test_leaving_notifies_members_and_preserves_room_data(client):
     room = client.post(
         "/rooms",
         json={"name": "Movie night", "created_by": "Alex", "members": ["Sam"]},
@@ -321,42 +337,33 @@ def test_delete_room_removes_all_data_and_notifies_every_client(client):
 
     with client.websocket_connect("/ws?user=Alex") as alex:
         with client.websocket_connect("/ws?user=Sam") as sam:
-            result = client.delete(f"/rooms/{room['id']}?user=Alex")
+            result = client.delete(f"/rooms/{room['id']}?user=Sam")
             assert result.status_code == 200
-            expected = {"type": "room_deleted", "room": room["id"]}
-            assert receive(alex, "room_deleted") == expected
-            assert receive(sam, "room_deleted") == expected
+            expected = {
+                "type": "room_member_left",
+                "room": room["id"],
+                "user": "Sam",
+            }
+            assert receive(alex, "room_member_left") == expected
+            assert receive(sam, "room_member_left") == expected
 
-    assert room["id"] not in {r["id"] for r in client.get("/rooms?user=Alex").json()}
     assert room["id"] not in {r["id"] for r in client.get("/rooms?user=Sam").json()}
-    assert client.get(f"/messages?room={room['id']}").json() == []
-    assert client.get(f"/polls?room={room['id']}").json() == []
+    assert room["id"] in {r["id"] for r in client.get("/rooms?user=Alex").json()}
+    assert client.get(f"/messages?room={room['id']}").json()[0]["id"] == message["id"]
+    assert client.get(f"/polls?room={room['id']}").json()[0]["id"] == poll["id"]
     with sqlite3.connect(store.db_path()) as db:
         assert (
             db.execute(
                 "SELECT COUNT(*) FROM rooms WHERE id = ?", (room["id"],)
             ).fetchone()[0]
-            == 0
+            == 1
         )
-        for table, column, value in (
-            ("messages", "room", room["id"]),
-            ("polls", "room", room["id"]),
-            ("room_members", "room", room["id"]),
-            ("reads", "room", room["id"]),
-            ("votes", "poll_id", poll["id"]),
-            ("reactions", "message_id", message["id"]),
-        ):
-            assert (
-                db.execute(
-                    f"SELECT COUNT(*) FROM {table} WHERE {column} = ?", (value,)
-                ).fetchone()[0]
-                == 0
-            ), table
         assert (
             db.execute(
-                "SELECT COUNT(*) FROM messages_fts WHERE text MATCH 'cinema'"
+                "SELECT COUNT(*) FROM room_leaves WHERE room = ? AND user = 'Sam'",
+                (room["id"],),
             ).fetchone()[0]
-            == 0
+            == 1
         )
 
 
@@ -950,15 +957,19 @@ def test_dev_reset_backs_up_and_starts_again(client, stories, tmp_path):
     assert client.get("/messages?room=demo").json() == []
 
 
-def test_dev_tools_reuse_the_ids_of_deleted_chats(client, stories):
+def test_leaving_a_premade_chat_hides_it_only_from_that_user(client, stories):
     client.post("/dev/stories/story")
-    assert client.delete("/rooms/saturday-plans?user=Alex").status_code == 200
-    # A deleted room's id stays reserved for everyone else...
-    assert client.post("/dev/stories/story").json()["room"] == "saturday-plans-2"
-    # ...but starting again frees it.
-    client.post("/dev/reset", json={"story": "story"})
-    assert {r["id"] for r in client.get("/rooms").json()} == {"demo", "saturday-plans"}
-    assert post(client, "hi", room="saturday-plans")["room"] == "saturday-plans"
+    assert client.delete("/rooms/saturday-plans?user=Alex").json() == {
+        "left": True,
+        "room": "saturday-plans",
+        "user": "Alex",
+    }
+    assert "saturday-plans" not in {
+        r["id"] for r in client.get("/rooms?user=Alex").json()
+    }
+    assert "saturday-plans" in {r["id"] for r in client.get("/rooms?user=Sam").json()}
+    assert len(client.get("/messages?room=saturday-plans").json()) == 4
+    assert client.post("/dev/stories/story").json()["room"] == "saturday-plans"
 
 
 def test_dev_reset_to_an_unknown_chat_deletes_nothing(client, stories):
@@ -1006,3 +1017,25 @@ def test_dev_tools_can_be_turned_off(client, monkeypatch):
     monkeypatch.setattr(devtools, "ENABLED", False)
     assert client.get("/dev/stories").status_code == 404
     assert client.post("/dev/reset", json={}).status_code == 404
+
+
+def test_legacy_shared_room_can_be_left_individually(client):
+    room = client.post(
+        "/rooms", json={"name": "Older room", "created_by": "Alex"}
+    ).json()
+    message = post(client, "Older history stays here", room=room["id"])
+
+    assert room["id"] in {r["id"] for r in client.get("/rooms?user=Sam").json()}
+    result = client.delete(f"/rooms/{room['id']}?user=Sam")
+    assert result.json() == {"left": True, "room": room["id"], "user": "Sam"}
+    assert room["id"] not in {r["id"] for r in client.get("/rooms?user=Sam").json()}
+    assert room["id"] in {r["id"] for r in client.get("/rooms?user=Alex").json()}
+    assert room["id"] in {r["id"] for r in client.get("/rooms?user=Taylor").json()}
+    assert client.get(f"/messages?room={room['id']}").json()[0]["id"] == message["id"]
+    assert (
+        client.post(
+            "/messages",
+            json={"room": room["id"], "user": "Sam", "text": "stale send"},
+        ).status_code
+        == 403
+    )

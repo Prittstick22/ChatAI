@@ -108,7 +108,7 @@ export type ServerEvent =
   | { type: 'presence'; online: string[] }
   | { type: 'read'; room: string; user: string; message_id: number }
   | { type: 'room'; room: Room }
-  | { type: 'room_deleted'; room: string }
+  | { type: 'room_member_left'; room: string; user: string }
   | { type: 'poll'; poll: Poll }
   | { type: 'nudge'; room: string; nudge: Proposal }
   | { type: 'summary'; room: string; summary: Summary }

@@ -61,8 +61,8 @@ export type NewRoom = { name: string; created_by: string; members: string[] };
 export const chatApi = {
   rooms: (user: string) => request<Room[]>('/rooms' + query({ user })),
   createRoom: (room: NewRoom) => request<Room>('/rooms', { method: 'POST', json: room }),
-  deleteRoom: (room: string, user: string) =>
-    request<{ deleted: boolean; room: string }>(`/rooms/${encodeURIComponent(room)}` + query({ user }), { method: 'DELETE' }),
+  leaveRoom: (room: string, user: string) =>
+    request<{ left: boolean; room: string; user: string }>(`/rooms/${encodeURIComponent(room)}` + query({ user }), { method: 'DELETE' }),
   markRead: (room: string, user: string, messageId: number) =>
     request<{ room: string; user: string; message_id: number }>(`/rooms/${encodeURIComponent(room)}/read`, {
       method: 'POST',
