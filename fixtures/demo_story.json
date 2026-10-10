@@ -1,0 +1,43 @@
+{
+  "room_name": "Saturday plans",
+  "created_by": "Alex",
+  "members": ["Sam", "Jordan", "Taylor"],
+  "seed_marker": "Made this group so we can plan Saturday without losing the details.",
+  "presenter": "Sam",
+  "presenter_read": 4,
+  "messages": [
+    {"user": "Alex", "text": "Made this group so we can plan Saturday without losing the details.", "at": "-1d 16:02"},
+    {"user": "Sam", "text": "Good idea. Is everyone around next Saturday?", "at": "-1d 16:05"},
+    {"user": "Jordan", "text": "I should be free after lunch.", "at": "-1d 16:11"},
+    {"user": "Taylor", "text": "Saturday works for me too.", "at": "-1d 16:14"},
+    {"user": "Alex", "text": "How about meeting at 2pm on Saturday 17 October?", "at": "-1d 19:41"},
+    {"user": "Jordan", "text": "2pm is good, I might be a few minutes late.", "at": "-1d 19:44"},
+    {"user": "Taylor", "text": "Count me in for 2pm.", "at": "-1d 19:46"},
+    {"user": "Alex", "text": "Great, Saturday 17 October at 2pm it is.", "at": "-1d 19:47"},
+    {"user": "Jordan", "text": "We could meet by the clock tower at Mile End Park.", "at": "-1d 20:15"},
+    {"user": "Taylor", "text": "There's a cafe nearby if the weather turns.", "at": "-1d 20:18"},
+    {"user": "Alex", "text": "Let's meet at the park entrance and decide from there.", "at": "-1d 20:22"},
+    {"user": "Alex", "text": "@Sam can you check the forecast on Friday and let everyone know?", "at": "-1d 20:23"},
+    {"user": "Jordan", "text": "Could we keep it to around £15 each?", "at": "-1d 21:05"},
+    {"user": "Taylor", "text": "That works for me. I'll bring a deck of cards.", "at": "-1d 21:07"},
+    {"user": "Alex", "text": "I'll bring a picnic blanket and some cups.", "at": "-1d 21:12"},
+    {"user": "Jordan", "text": "I'll look up the cafe opening hours as a rainy-day backup.", "at": "-1d 21:30"},
+    {"user": "Taylor", "text": "Has anyone asked Priya if she's coming?", "at": "-1d 22:04"},
+    {"user": "Alex", "text": "Morning! We still need to sort out food for after, let's decide today.", "at": "0d 09:12"}
+  ],
+  "other_rooms": [
+    {
+      "room": "demo",
+      "messages": [
+        {"user": "Taylor", "text": "Slides are in the shared drive, have a look when you can.", "at": "0d 08:41"},
+        {"user": "Alex", "text": "Nice, I'll review them on the train.", "at": "0d 08:47"},
+        {"user": "Jordan", "text": "Looks great so far 👍", "at": "0d 08:55"}
+      ]
+    }
+  ],
+  "smoke_queries": [
+    {"query": "when are we meeting", "expected_text": "How about meeting at 2pm on Saturday 17 October?"},
+    {"query": "what if it rains", "expected_text": "I'll look up the cafe opening hours as a rainy-day backup."},
+    {"query": "how much will it cost", "expected_text": "Could we keep it to around £15 each?"}
+  ]
+}

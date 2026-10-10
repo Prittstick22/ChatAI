@@ -37,7 +37,13 @@ export type NudgeSlotProps = Base & {
 export type PollSlotProps = Base & { poll: Poll; message: ChatMessage; onChange: (poll: Poll) => void };
 
 /** Shown on the "new messages" divider when the room is opened with unread messages. */
-export type CatchUpSlotProps = Base & { unread: ChatMessage[]; summary?: Summary };
+export type CatchUpSlotProps = Base & {
+  unread: ChatMessage[];
+  summary?: Summary;
+  onJump: (messageId: number) => void;
+  /** Open the side panel on the full catch-up. */
+  onOpenSummary: () => void;
+};
 
 /** Row above the composer, e.g. smart reply chips. `insert` puts text in the composer. */
 export type ComposerSlotProps = Base & { messages: ChatMessage[]; insert: (text: string) => void };

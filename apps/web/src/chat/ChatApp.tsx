@@ -56,8 +56,8 @@ function InsightTabs({
           <span className="tab-label">
             <Icon className={`insight-tab-icon insight-tab-icon-${id}`} size={id === 'search' ? 21 : 18} weight="regular" aria-hidden="true" />
             {label}
+            {id === 'catchup' && newSummary && <span className="button-dot" aria-hidden="true" />}
           </span>
-          {id === 'catchup' && newSummary && <span className="button-dot" aria-hidden="true" />}
         </button>
       ))}
     </div>
@@ -502,9 +502,20 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
   const renderCatchUp = useMemo(
     () =>
       CatchUp && room
-        ? (unread: ChatMessage[]) => <CatchUp room={room} me={me} api={chatApi} unread={unread} summary={summary} />
+        ? (unread: ChatMessage[]) => (
+            <CatchUp
+              key={`${room.id}-${me}`}
+              room={room}
+              me={me}
+              api={chatApi}
+              unread={unread}
+              summary={summary}
+              onJump={jumpTo}
+              onOpenSummary={() => setInsights('catchup')}
+            />
+          )
         : undefined,
-    [CatchUp, room, me, summary],
+    [CatchUp, room, me, summary, jumpTo],
   );
 
   const ComposerSlot = slots.composer;
