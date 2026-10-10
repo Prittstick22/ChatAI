@@ -101,6 +101,22 @@ export function MessageList(props: Props) {
     if (bottom) setUnseen(0);
   }, []);
 
+  useEffect(() => {
+    if (selected === null) return;
+    const dismissOnOutsideClick = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return;
+      const target = event.target;
+      const row = target.closest<HTMLElement>('.row[data-mid]');
+      const inSelectedRow = row?.dataset.mid === String(selected);
+      const inToolbar = inSelectedRow && target.closest('.toolbar, .emoji-picker');
+      const onMessageText = inSelectedRow && target.closest('.bubble') && !target.closest('a, button');
+      if (inToolbar || onMessageText) return;
+      setSelected(null);
+    };
+    document.addEventListener('pointerdown', dismissOnOutsideClick, true);
+    return () => document.removeEventListener('pointerdown', dismissOnOutsideClick, true);
+  }, [selected]);
+
   useEffect(() => onAtBottom(atBottom), [atBottom, onAtBottom]);
 
   // Stay pinned to the bottom while content grows (new messages, animations, images).

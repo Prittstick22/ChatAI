@@ -8,7 +8,7 @@ import {
   WarningCircleIcon,
 } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
-import { forwardRef, memo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { forwardRef, memo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Avatar } from './Avatar';
 import { EmojiPicker, QUICK_REACTIONS } from './EmojiPicker';
 import { fullTime, isJumboEmoji, listNames, mentions, segments, time } from './format';
@@ -83,7 +83,6 @@ const MessageRowView = forwardRef<HTMLDivElement, Props>(function MessageRowView
 ) {
   const mine = m.user === me;
   const [confirming, setConfirming] = useState(false);
-  const pointer = useRef('mouse');
   const confirmed = m.id > 0;
   const live = confirmed && !m.deleted;
   const poll = m.poll && !m.deleted && renderPoll ? renderPoll(m) : null;
@@ -134,11 +133,17 @@ const MessageRowView = forwardRef<HTMLDivElement, Props>(function MessageRowView
             layoutId={morph}
             className={bubbleClass}
             tabIndex={live ? 0 : undefined}
-            onPointerDown={(e) => (pointer.current = e.pointerType)}
+            aria-label={live ? `Message from ${m.user}: ${m.text}` : undefined}
+            aria-expanded={live ? selected : undefined}
             onClick={(e) => {
-              // Touch has no hover, so a tap shows the actions instead.
               if ((e.target as HTMLElement).closest('a, button')) return;
-              if (live && pointer.current !== 'mouse') onSelect(selected ? null : m.id);
+              if (live) onSelect(selected ? null : m.id);
+            }}
+            onKeyDown={(e) => {
+              if (live && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                onSelect(selected ? null : m.id);
+              }
             }}
             transition={spring}
           >
