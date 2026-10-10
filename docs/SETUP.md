@@ -86,3 +86,39 @@ git commit -m "feat: <topic>"
 git push -u origin feat/<short-topic>
 ```
 Open a PR into `main`, request review, merge small changes, then pull `main` again.
+
+## Docker verification and restart
+
+After running `docker compose up --build`, open a second terminal in the repository root and check the containers:
+
+```powershell
+docker compose ps
+```
+
+All three services (`web`, `chat`, and `ai`) should show a running status.
+
+Verify these endpoints:
+
+| Service | URL | Expected result |
+|---|---|---|
+| Frontend | http://localhost:5173 | Web application loads |
+| Chat API | http://localhost:8000/health | `{"status":"ok"}` |
+| AI service | http://localhost:8001/health | JSON containing `"status":"ok"` |
+
+To stop the application:
+
+```powershell
+docker compose down
+```
+
+To rebuild and restart it in the background:
+
+```powershell
+docker compose up --build -d
+```
+
+Then run `docker compose ps` and repeat the health checks.
+
+**AI fallback behaviour:** If the OpenAI API key has insufficient credits, `/digest` may return a fallback summary even though the endpoint responds with HTTP 200. A successful HTTP response does not necessarily mean AI generation succeeded.
+
+For a fresh installation, follow the platform-specific clone and `.env` setup instructions above before running Compose.
