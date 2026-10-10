@@ -297,13 +297,43 @@ async def digest(room: str = store.DEFAULT_ROOM):
 
 @app.get("/search")
 async def search(query: str, room: str = store.DEFAULT_ROOM):
-    history = store.recent_for_ai(room)
-    keyword = [m for m in history if query.lower() in m["text"].lower()]
-    return await ai_call(
+    """Hybrid search. SQLite full-text search covers the room's whole history and
+    catches exact words and names; the AI service ranks recent messages by meaning.
+    The two rankings are merged with reciprocal rank fusion, so a message both find
+    comes first. Each result says which found it (`match`) and, for keyword hits,
+    which words matched (`highlight`)."""
+    query = query.strip()[:200]
+    if not query:
+        return {"results": [], "mode": "keyword"}
+    keyword = store.search_messages(room, query)
+    ai = await ai_call(
         "/search",
-        {"messages": history, "query": query},
-        {"results": keyword, "mode": "keyword"},
+        {"messages": store.recent_for_ai(room), "query": query},
+        {"results": [], "mode": "keyword"},
     )
+    # Only a semantic ranking adds anything; the AI's own keyword fallback is a plain
+    # substring match, which full-text search already beats.
+    mode = "semantic" if ai.get("mode") == "semantic" else "keyword"
+    semantic = ai.get("results", []) if mode == "semantic" else []
+    rankings = {
+        "keyword": [m["id"] for m in keyword],
+        "semantic": [m.get("id") for m in semantic if isinstance(m, dict)],
+    }
+    scores: dict[int, float] = {}
+    found_by: dict[int, list[str]] = {}
+    for source, ids in rankings.items():
+        for rank, message_id in enumerate(ids):
+            if not isinstance(message_id, int):
+                continue
+            scores[message_id] = scores.get(message_id, 0) + 1 / (60 + rank)
+            found_by.setdefault(message_id, []).append(source)
+    best = sorted(scores, key=scores.__getitem__, reverse=True)[: store.SEARCH_LIMIT]
+    highlights = {m["id"]: m["highlight"] for m in keyword}
+    results = [
+        {**m, "match": found_by[m["id"]], "highlight": highlights.get(m["id"])}
+        for m in store.get_messages(room, best)
+    ]
+    return {"results": results, "mode": mode}
 
 
 @app.get("/suggest")

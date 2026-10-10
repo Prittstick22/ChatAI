@@ -1,4 +1,4 @@
-import type { Message, Poll, Proposal, Room } from './types';
+import type { Message, Poll, Proposal, Room, SearchResponse } from './types';
 
 const configured = import.meta.env.VITE_CHAT_API_URL?.trim();
 
@@ -75,7 +75,7 @@ export const chatApi = {
 
   // AI gateway. The chat API answers with a fallback whenever the AI service is down.
   digest: (room: string) => request<{ summary: string; topics?: unknown[] }>('/digest' + query({ room })),
-  search: (text: string, room: string) => request<{ results: Message[]; mode: string }>('/search' + query({ query: text, room })),
+  search: (text: string, room: string) => request<SearchResponse>('/search' + query({ query: text, room })),
   suggest: (room: string) => request<{ suggestion: string; proposals?: Proposal[] }>('/suggest' + query({ room })),
 
   polls: (room?: string) => request<Poll[]>('/polls' + query({ room })),

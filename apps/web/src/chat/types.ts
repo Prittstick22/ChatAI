@@ -43,6 +43,15 @@ export type Poll = {
   votes?: Record<string, number>;
 };
 
+/** A /search result: a Message plus which search found it and, for keyword hits,
+ * the text split into segments with the matched words marked. */
+export type SearchResult = Message & {
+  match?: ('keyword' | 'semantic')[];
+  highlight?: { text: string; match: boolean }[] | null;
+};
+
+export type SearchResponse = { results: SearchResult[]; mode: 'semantic' | 'keyword' | string };
+
 /** Structured AI proposal (docs/CONTRACT_V1.md). Not produced by any service yet. */
 export type Proposal = {
   id: string;

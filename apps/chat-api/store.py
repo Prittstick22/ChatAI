@@ -39,6 +39,26 @@ MIGRATIONS = [
     ALTER TABLE polls ADD COLUMN created_by TEXT;
     ALTER TABLE polls ADD COLUMN created_at TEXT;
     """,
+    # 3: full-text search over message text, kept in step by triggers. Also blanks
+    # messages deleted before deletes started erasing text.
+    """
+    UPDATE messages SET text = '' WHERE deleted_at IS NOT NULL;
+    CREATE VIRTUAL TABLE messages_fts USING fts5(
+        text, content='messages', content_rowid='id',
+        tokenize='porter unicode61 remove_diacritics 2'
+    );
+    CREATE TRIGGER messages_fts_insert AFTER INSERT ON messages BEGIN
+        INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text);
+    END;
+    CREATE TRIGGER messages_fts_delete AFTER DELETE ON messages BEGIN
+        INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', old.id, old.text);
+    END;
+    CREATE TRIGGER messages_fts_update AFTER UPDATE OF text ON messages BEGIN
+        INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', old.id, old.text);
+        INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text);
+    END;
+    INSERT INTO messages_fts(messages_fts) VALUES ('rebuild');
+    """,
 ]
 
 
@@ -192,6 +212,79 @@ def recent_for_ai(room: str, limit: int = PAGE_LIMIT) -> list[dict]:
     keys = ("id", "room", "user", "text", "created_at")
     return [
         {k: m[k] for k in keys} for m in list_messages(room, limit) if not m["deleted"]
+    ]
+
+
+def get_messages(room: str, ids: list[int]) -> list[dict]:
+    """The visible messages among `ids` in `room`, in the order given."""
+    ids = [i for i in dict.fromkeys(ids) if isinstance(i, int)]
+    if not ids:
+        return []
+    marks = ",".join("?" * len(ids))
+    with closing(connect()) as db:
+        rows = db.execute(
+            MESSAGE_SELECT
+            + f"WHERE m.room = ? AND m.deleted_at IS NULL AND m.id IN ({marks})",
+            (room, *ids),
+        ).fetchall()
+        found = {m["id"]: m for m in _hydrate(db, rows)}
+    return [found[i] for i in ids if i in found]
+
+
+# ---------------------------------------------------------------- search
+
+SEARCH_LIMIT = 20
+STOPWORDS = frozenset(
+    "a about an and are as at be but by can could do does for from had has have how i "
+    "if in is it its me my of on or our so that the their them then there they this "
+    "to up us was we were what when where which who why will with would you your".split()
+)
+# Control characters FTS5 wraps around each matched term; never typed in chat.
+HIT_START, HIT_END = "\x02", "\x03"
+
+
+def _fts_query(text: str) -> str | None:
+    """Turn free text into a safe FTS5 query: every word quoted (so input can never be
+    FTS syntax), OR-ed so bm25 ranks messages matching more words first, and the last
+    word prefix-matched so a half-typed query still finds something."""
+    words = re.findall(r"\w+", text.lower())
+    kept = [w for w in words if w not in STOPWORDS] or words
+    if not kept:
+        return None
+    last = kept[-1]
+    return " OR ".join(
+        f'"{w}"*' if w == last and len(w) >= 3 else f'"{w}"'
+        for w in dict.fromkeys(kept)
+    )
+
+
+def _segments(marked: str) -> list[dict]:
+    """Split highlight() output into segments: matched words get match=True."""
+    parts = re.split(f"[{HIT_START}{HIT_END}]", marked)
+    return [
+        {"text": part, "match": i % 2 == 1} for i, part in enumerate(parts) if part
+    ]
+
+
+def search_messages(room: str, text: str, limit: int = SEARCH_LIMIT) -> list[dict]:
+    """Full-text search over a room's whole history, best match first. Each message
+    gets a `highlight` list of text segments marking the words that matched."""
+    query = _fts_query(text)
+    if query is None:
+        return []
+    with closing(connect()) as db:
+        hits = db.execute(
+            "SELECT messages_fts.rowid AS id, "
+            "highlight(messages_fts, 0, char(2), char(3)) AS marked "
+            "FROM messages_fts JOIN messages m ON m.id = messages_fts.rowid "
+            "WHERE messages_fts MATCH ? AND m.room = ? AND m.deleted_at IS NULL "
+            "ORDER BY bm25(messages_fts) LIMIT ?",
+            (query, room, limit),
+        ).fetchall()
+    marked = {h["id"]: h["marked"] for h in hits}
+    return [
+        {**m, "highlight": _segments(marked[m["id"]])}
+        for m in get_messages(room, list(marked))
     ]
 
 

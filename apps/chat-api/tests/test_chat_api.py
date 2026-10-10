@@ -304,6 +304,76 @@ def test_ai_routes_fall_back_when_ai_is_down(client):
     assert client.get("/suggest").json() == {"suggestion": "No suggestion"}
 
 
+def search(client, query, room="demo"):
+    r = client.get("/search", params={"query": query, "room": room})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_keyword_search_finds_word_forms_and_highlights(client):
+    hit = post(client, "Booked the library meeting room for Saturday")
+    post(client, "Pizza or sushi?", user="Sam")
+    post(client, "library elsewhere", room="other")
+    for query in ("library", "meetings", "meet", "libr", "LIBRARY?"):
+        found = search(client, query)
+        assert [m["id"] for m in found["results"]] == [hit["id"]], query
+    [result] = search(client, "library")["results"]
+    assert result["match"] == ["keyword"]
+    assert result["highlight"] == [
+        {"text": "Booked the ", "match": False},
+        {"text": "library", "match": True},
+        {"text": " meeting room for Saturday", "match": False},
+    ]
+    assert search(client, "")["results"] == []
+
+
+def test_keyword_search_ranks_more_matching_words_first(client):
+    one = post(client, "the room is booked")
+    both = post(client, "library room booked for noon")
+    ids = [m["id"] for m in search(client, "library room")["results"]]
+    assert ids == [both["id"], one["id"]]
+
+
+def test_keyword_search_follows_edits_and_deletes(client):
+    m = post(client, "Meet at the library")
+    client.patch(f"/messages/{m['id']}", json={"user": "Alex", "text": "Meet at the gym"})
+    assert search(client, "library")["results"] == []
+    assert [r["id"] for r in search(client, "gym")["results"]] == [m["id"]]
+    client.delete(f"/messages/{m['id']}?user=Alex")
+    assert search(client, "gym")["results"] == []
+
+
+@pytest.mark.parametrize(
+    "query", ['"', "AND", "NEAR(", "*", "-meeting", "text:meeting", "a OR", "'; DROP"]
+)
+def test_search_input_is_never_fts_syntax(client, query):
+    post(client, "meeting text AND near")
+    assert isinstance(search(client, query)["results"], list)
+
+
+def test_search_merges_keyword_and_semantic_rankings(client, monkeypatch):
+    exact = post(client, "Library opens at nine")
+    meaning = post(client, "Saturday at noon works for everyone", user="Sam")
+    elsewhere = post(client, "Saturday elsewhere", room="other")
+    gone = post(client, "Saturday maybe")
+    client.delete(f"/messages/{gone['id']}?user=Alex")
+
+    async def fake_ai(path, payload, fallback):
+        assert path == "/search" and payload["query"] == "when is the library meetup"
+        ids = [meaning["id"], exact["id"], elsewhere["id"], gone["id"], "junk"]
+        return {"results": [{"id": i} for i in ids], "mode": "semantic"}
+
+    monkeypatch.setattr(main, "ai_call", fake_ai)
+    found = search(client, "when is the library meetup")
+    assert found["mode"] == "semantic"
+    assert [(m["id"], m["match"]) for m in found["results"]] == [
+        (exact["id"], ["keyword", "semantic"]),
+        (meaning["id"], ["semantic"]),
+    ], "found by both first; other rooms and deleted messages never returned"
+    assert found["results"][1]["highlight"] is None
+    assert found["results"][1]["text"] == "Saturday at noon works for everyone"
+
+
 def test_calendar_export(client):
     r = client.get("/calendar.ics?title=Team%20meeting&date=20261010T120000Z")
     assert "BEGIN:VEVENT" in r.text and "SUMMARY:Team meeting" in r.text
@@ -323,6 +393,7 @@ def test_migrates_a_scaffold_database(tmp_path, monkeypatch):
     with sqlite3.connect(path) as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == len(store.MIGRATIONS)
     [message] = store.list_messages("demo")
+    assert [m["id"] for m in store.search_messages("demo", "old")] == [message["id"]]
     assert (
         message["text"] == "old"
         and message["deleted"] is False
