@@ -5,7 +5,6 @@
   grid-template-columns: 296px minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
-  transition: grid-template-columns 0.2s ease;
 }
 
 .app.sidebar-collapsed {
@@ -2224,10 +2223,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app {
-    transition: none;
-  }
-
   .conversation,
   .app.show-list .conversation,
   .app.show-chat .sidebar {

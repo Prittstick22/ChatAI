@@ -118,7 +118,7 @@ export function Sidebar({ me, rooms, activeRoom, collapsed, online, typing, onOp
           const active = room.id === activeRoom;
           const unread = active ? 0 : room.unread;
           return (
-            <motion.li key={room.id} layout transition={spring}>
+            <motion.li key={room.id}>
               <button
                 type="button"
                 className={['room-item', active && 'active', unread > 0 && 'unread'].filter(Boolean).join(' ')}
