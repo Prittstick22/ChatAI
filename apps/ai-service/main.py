@@ -6,6 +6,7 @@ from openai import AsyncOpenAI
 
 import digest as catchup
 import nudge_graph
+import replies as smart_replies
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("ai-service")
@@ -137,3 +138,25 @@ async def suggest(req: SuggestRequest):
             log.warning("nudge graph failed: %r", exc)
     suggestion = nudge_graph.describe(proposals[0]) if proposals else "No suggestion"
     return {"suggestion": suggestion, "proposals": proposals}
+
+
+class RepliesRequest(BaseModel):
+    messages: list[dict] = []
+    user: str = ""
+    # The user's own earlier messages, for their voice.
+    style: list[str] = []
+
+
+@app.post("/replies")
+async def replies(req: RepliesRequest):
+    """Up to three replies `user` could send next, in their own style (replies.py)."""
+    if os.getenv("OPENAI_API_KEY") and req.user and req.messages:
+        try:
+            return {
+                "replies": await smart_replies.suggest(
+                    model, req.messages, req.user, req.style
+                )
+            }
+        except Exception as exc:
+            log.warning("smart replies failed: %r", exc)
+    return {"replies": []}

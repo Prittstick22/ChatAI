@@ -283,6 +283,18 @@ def get_messages(room: str, ids: list[int]) -> list[dict]:
     return [found[i] for i in ids if i in found]
 
 
+def style_samples(user: str, limit: int = 40) -> list[str]:
+    """The user's own most recent messages in any room, oldest first: how they write,
+    for smart replies. Polls and deleted messages are left out."""
+    with closing(connect()) as db:
+        rows = db.execute(
+            "SELECT text FROM messages WHERE user = ? AND deleted_at IS NULL"
+            " AND poll_id IS NULL ORDER BY id DESC LIMIT ?",
+            (user, limit),
+        ).fetchall()
+    return [r["text"] for r in reversed(rows)]
+
+
 # ---------------------------------------------------------------- search
 
 SEARCH_LIMIT = 20

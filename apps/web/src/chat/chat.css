@@ -1859,6 +1859,53 @@
   padding: 0 24px 18px;
 }
 
+/* Smart replies (defaults/SmartReplies.tsx): chips above the composer. */
+.smart-replies {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.smart-replies::-webkit-scrollbar {
+  display: none;
+}
+
+.smart-replies-icon {
+  flex: none;
+  color: var(--accent-text);
+}
+
+.smart-reply {
+  flex: none;
+  max-width: 280px;
+  overflow: hidden;
+  padding: 8px 14px;
+  border: 1px solid rgb(150 138 255 / 0.32);
+  border-radius: 999px;
+  background: rgb(116 102 255 / 0.13);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.smart-reply:hover {
+  border-color: rgb(150 138 255 / 0.6);
+  background: rgb(116 102 255 / 0.26);
+}
+
+.smart-reply:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
 .composer {
   border: 1px solid var(--glass-edge);
   border-radius: 24px;

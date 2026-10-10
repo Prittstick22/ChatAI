@@ -11,6 +11,7 @@ import { CatchUpCard } from './defaults/CatchUpCard';
 import { InsightsPanel } from './defaults/InsightsPanel';
 import { NudgeCard } from './defaults/NudgeCard';
 import { PollCard } from './defaults/PollCard';
+import { SmartReplies } from './defaults/SmartReplies';
 import './style.css';
 import './chat/chat.css';
 
@@ -21,7 +22,7 @@ const slots: ChatSlots = {
   nudge: NudgeCard, // inline card for each `nudge` WebSocket event
   poll: PollCard, // a poll posted into the conversation, with live voting
   catchUp: CatchUpCard, // "While you were away", on the new-messages divider
-  // composer: SmartReplies, // row above the composer; receives insert(text)
+  composer: SmartReplies, // reply chips above the composer, in your own style
 };
 
 function App() {

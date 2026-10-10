@@ -13,6 +13,7 @@
 `GET /digest` → `{"summary":"..."}` (legacy)
 `GET /search?query=...` → `{"results":[Message],"mode":"semantic|keyword|keyword-fallback"}`
 `GET /suggest` → `{"suggestion":"..."}` (legacy)
+`GET /replies?room=demo&user=Sam` → `{"replies":["..."]}`: up to 3 smart replies in Sam's own style (additive). Empty when the newest message is Sam's or AI is down.
 `GET /polls`, `POST /polls`, `POST /polls/{id}/votes`; `GET /calendar.ics?title=...&date=YYYYMMDDTHHMMSSZ`.
 
 ### Message
@@ -41,6 +42,7 @@ removes the room; reconnecting clients no longer receive it from `GET /rooms`.
 `POST /digest` body `{"messages":[Message]}`; return `{"summary":"..."}` for compatibility. Optional new `topics` array is additive, not replacement.
 `POST /search` body `{"query":"when is the meetup","messages":[Message]}` → `{"results":[Message],"mode":"semantic"}`. Keep original ids.
 `POST /suggest` body `{"messages":[Message]}` → `{"suggestion":"..."}` compatibility, optionally add `"proposals":[Proposal]` after agreement.
+`POST /replies` body `{"messages":[Message],"user":"Sam","style":["Sam's earlier messages"]}` → `{"replies":["..."]}` (additive). `style` is only for voice; the service never stores it.
 
 ### Proposed structured Proposal (not yet implemented)
 ```json
