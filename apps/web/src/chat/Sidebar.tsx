@@ -69,122 +69,154 @@ export function Sidebar({ me, rooms, activeRoom, collapsed, online, typing, onOp
     };
   }, [menu]);
 
+  useEffect(() => {
+    if (!creating) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCreating(false);
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [creating]);
+
   return (
-    <nav className={collapsed ? 'sidebar sidebar-collapsed' : 'sidebar'} aria-label="Rooms">
+    <nav className={['sidebar', collapsed && 'sidebar-collapsed', creating && 'creating-group'].filter(Boolean).join(' ')} aria-label="Rooms">
       <div className="sidebar-top">
         <div className="sidebar-brand-row">
           <img className="wordmark" src="/brand/hai-logo.png" alt="H.AI" />
-          <button
-            type="button"
-            className="icon-button sidebar-collapse"
-            aria-label={collapsed ? 'Expand room list' : 'Collapse room list'}
-            aria-expanded={!collapsed}
-            title={collapsed ? 'Expand room list' : 'Collapse room list'}
-            onClick={onToggleCollapsed}
-          >
-            <SidebarSimpleIcon size={20} mirrored={!collapsed} />
-          </button>
+          {!creating && (
+            <button
+              type="button"
+              className="icon-button sidebar-collapse"
+              aria-label={collapsed ? 'Expand room list' : 'Collapse room list'}
+              aria-expanded={!collapsed}
+              title={collapsed ? 'Expand room list' : 'Collapse room list'}
+              onClick={onToggleCollapsed}
+            >
+              <SidebarSimpleIcon size={20} mirrored={!collapsed} />
+            </button>
+          )}
+          {creating && (
+            <button type="button" className="button secondary sidebar-create-cancel" onClick={() => setCreating(false)}>
+              <XIcon size={17} weight="bold" />
+              Cancel
+            </button>
+          )}
         </div>
-        <div className="sidebar-tools">
-          <button
-            type="button"
-            className={creating ? 'icon-button pressed' : 'icon-button'}
-            aria-label={creating ? 'Cancel new group' : 'New group'}
-            aria-expanded={creating}
-            title={creating ? 'Cancel new group' : 'New group'}
-            onClick={() => {
-              if (collapsed) onToggleCollapsed();
-              setCreating((c) => !c);
-            }}
-          >
-            <motion.span animate={{ rotate: creating ? 45 : 0 }} transition={spring} style={{ display: 'flex' }}>
+        {!creating && (
+          <div className="sidebar-tools">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="New group"
+              aria-expanded={false}
+              title="New group"
+              onClick={() => {
+                if (collapsed) onToggleCollapsed();
+                setCreating(true);
+              }}
+            >
               <PlusIcon size={20} weight="bold" />
-            </motion.span>
-            <span className="sidebar-tool-label">{creating ? 'Cancel' : 'Add new chat'}</span>
-          </button>
-        </div>
+              <span className="sidebar-tool-label">Add new chat</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      <AnimatePresence initial={false}>
-        {creating && (
-          <motion.div
-            className="new-room"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={spring}
-          >
-            <NewGroupChat
-              me={me}
-              contacts={contacts}
-              online={online}
-              onCreate={onCreate}
-              onCancel={() => setCreating(false)}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <ul className="room-list">
-        {rooms.map((room) => {
-          const typers = Object.keys(typing[room.id] ?? {}).filter((u) => u !== me);
-          const line = lastLine(room, me, typers);
-          const active = room.id === activeRoom;
-          const unread = active ? 0 : room.unread;
-          return (
-            <motion.li key={room.id} className="room-entry">
-              <button
-                type="button"
-                className={['room-item', active && 'active', unread > 0 && 'unread'].filter(Boolean).join(' ')}
-                aria-current={active ? 'page' : undefined}
-                aria-label={`${room.name}${unread ? `, ${unread} unread` : ''}`}
-                title={collapsed ? room.name : undefined}
-                onClick={() => onOpen(room.id)}
-              >
-                {active && <motion.span layoutId="active-room" className="room-highlight" transition={spring} />}
-                <RoomBadge id={room.id} name={room.name} />
-                {unread > 0 && <span className="badge collapsed-badge">{unread > 99 ? '99+' : unread}</span>}
-                <span className="room-text">
-                  <span className="room-name-line">
-                    <span className="room-name">{room.name}</span>
-                    {room.last_message && <time className="room-time">{listTime(room.last_message.created_at)}</time>}
-                  </span>
-                  <span className="room-preview-line">
-                    <span className={line.typing ? 'room-preview typing' : 'room-preview'}>{line.text}</span>
-                    <AnimatePresence>
-                      {unread > 0 && (
-                        <motion.span
-                          key="badge"
-                          className="badge"
-                          aria-label={`${unread} unread`}
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          exit={{ scale: 0 }}
-                          transition={{ type: 'spring', stiffness: 700, damping: 22 }}
-                        >
-                          <motion.span key={unread} initial={{ y: -6, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
-                            {unread > 99 ? '99+' : unread}
+      <div className="room-selection">
+        <ul className="room-list">
+          {rooms.map((room) => {
+            const typers = Object.keys(typing[room.id] ?? {}).filter((u) => u !== me);
+            const line = lastLine(room, me, typers);
+            const active = room.id === activeRoom;
+            const unread = active ? 0 : room.unread;
+            return (
+              <motion.li key={room.id} className="room-entry">
+                <button
+                  type="button"
+                  className={['room-item', active && 'active', unread > 0 && 'unread'].filter(Boolean).join(' ')}
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={`${room.name}${unread ? `, ${unread} unread` : ''}`}
+                  title={collapsed ? room.name : undefined}
+                  onClick={() => onOpen(room.id)}
+                >
+                  {active && <motion.span layoutId="active-room" className="room-highlight" transition={spring} />}
+                  <RoomBadge id={room.id} name={room.name} />
+                  {unread > 0 && <span className="badge collapsed-badge">{unread > 99 ? '99+' : unread}</span>}
+                  <span className="room-text">
+                    <span className="room-name-line">
+                      <span className="room-name">{room.name}</span>
+                      {room.last_message && <time className="room-time">{listTime(room.last_message.created_at)}</time>}
+                    </span>
+                    <span className="room-preview-line">
+                      <span className={line.typing ? 'room-preview typing' : 'room-preview'}>{line.text}</span>
+                      <AnimatePresence>
+                        {unread > 0 && (
+                          <motion.span
+                            key="badge"
+                            className="badge"
+                            aria-label={`${unread} unread`}
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0 }}
+                            transition={{ type: 'spring', stiffness: 700, damping: 22 }}
+                          >
+                            <motion.span key={unread} initial={{ y: -6, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+                              {unread > 99 ? '99+' : unread}
+                            </motion.span>
                           </motion.span>
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
+                        )}
+                      </AnimatePresence>
+                    </span>
                   </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                className="room-leave"
-                aria-label={`Leave ${room.name} chat`}
-                title="Leave chat"
-                disabled={leavingRoom === room.id}
-                onClick={() => void leaveRoom(room)}
+                </button>
+                <button
+                  type="button"
+                  className="room-leave"
+                  aria-label={`Leave ${room.name} chat`}
+                  title="Leave chat"
+                  disabled={leavingRoom === room.id}
+                  onClick={() => void leaveRoom(room)}
+                >
+                  <SignOutIcon size={17} aria-hidden="true" />
+                </button>
+              </motion.li>
+            );
+          })}
+        </ul>
+        <AnimatePresence initial={false}>
+          {creating && (
+            <motion.div
+              className="new-room-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              onClick={(event) => {
+                if (event.target === event.currentTarget) setCreating(false);
+              }}
+            >
+              <motion.div
+                className="new-room glass"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Create a group chat"
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                transition={spring}
               >
-                <SignOutIcon size={17} aria-hidden="true" />
-              </button>
-            </motion.li>
-          );
-        })}
-      </ul>
+                <NewGroupChat
+                  me={me}
+                  contacts={contacts}
+                  online={online}
+                  onCreate={onCreate}
+                  onCancel={() => setCreating(false)}
+                />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       <div className="identity" ref={menuRef}>
         <AnimatePresence>
