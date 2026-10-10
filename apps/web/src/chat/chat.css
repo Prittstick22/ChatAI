@@ -2384,6 +2384,13 @@
   backdrop-filter: var(--blur);
 }
 
+.gate-logo {
+  display: block;
+  width: auto;
+  height: 52px;
+  margin: 0 auto 26px;
+}
+
 .gate h1 {
   margin: 0 0 8px;
   font-size: 34px;
