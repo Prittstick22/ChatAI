@@ -498,7 +498,7 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
 
   const totalUnread = roomList.reduce((sum, r) => sum + (r.id === activeRoom && !document.hidden ? 0 : r.unread), 0);
   useEffect(() => {
-    document.title = totalUnread ? `(${totalUnread}) ChatAI` : 'ChatAI';
+    document.title = totalUnread ? `(${totalUnread}) H.AI` : 'H.AI';
   }, [totalUnread]);
 
   const nudges = room ? state.nudges[room.id] : undefined;
@@ -585,7 +585,7 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
     return (
       <main className="fullscreen-state">
         {state.roomsStatus === 'loading' ? (
-          <p className="loading-word">Loading ChatAI…</p>
+          <p className="loading-word">Loading H.AI…</p>
         ) : (
           <>
             <h1>Can't reach the chat server</h1>

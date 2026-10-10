@@ -42,7 +42,7 @@ export function PollCard({ poll, me, api, onChange }: PollSlotProps) {
         <ChartBarIcon size={16} weight="bold" aria-hidden />
         <span>Poll</span>
         {poll.proposal_id && (
-          <span className="pollcard-from" title="ChatAI suggested this poll from the conversation">
+          <span className="pollcard-from" title="H.AI suggested this poll from the conversation">
             <SparkleIcon size={13} weight="fill" aria-hidden />
             Suggested from the chat
           </span>
