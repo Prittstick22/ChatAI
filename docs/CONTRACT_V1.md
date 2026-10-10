@@ -8,7 +8,7 @@
 `POST /messages` JSON `{"user":"Alex","text":"We meet Saturday","room":"demo"}` → 201 Message
 `GET /rooms?user=Alex` → rooms visible to Alex
 `POST /rooms` JSON `{"name":"Food run","created_by":"Alex","members":["Sam"]}` → 201 Room
-`DELETE /rooms/{room}?user=Alex` → `{"deleted":true,"room":"food-run"}`; only the creator of an owned room may permanently delete it. Ownerless legacy rooms cannot be deleted.
+`DELETE /rooms/{room}?user=Alex` → `{"left":true,"room":"food-run","user":"Alex"}`; the user leaves the chat without deleting it for others.
 `WS /ws` → `{"type":"message","message":Message}` after POST
 `GET /digest` → `{"summary":"..."}` (legacy)
 `GET /search?query=...` → `{"results":[Message],"mode":"semantic|keyword|keyword-fallback"}`
@@ -33,10 +33,11 @@ as do rooms already present before membership support. There is no account regis
 authentication: the frontend uses the known demo identities and currently online or
 previously grouped identities as the selectable contact directory.
 
-Deleting an owned room permanently removes its messages, polls, votes, reactions,
-read positions, and membership rows. The chat API broadcasts
-`{"type":"room_deleted","room":"food-run"}` to connected clients so every UI
-removes the room; reconnecting clients no longer receive it from `GET /rooms`.
+Leaving a chat records a per-user leave and hides it from that user's room list.
+Messages, polls, and history remain available to other members. The chat API
+broadcasts `{"type":"room_member_left","room":"food-run","user":"Alex"}`
+so connected clients update their member list. Ownerless legacy rooms can be left
+individually and remain visible to everyone else.
 
 ## Recommended AI service routes :8001
 `POST /digest` body `{"messages":[Message]}`; return `{"summary":"..."}` for compatibility. Optional new `topics` array is additive, not replacement.
