@@ -30,16 +30,14 @@ function InsightTabs({
   active,
   onSelect,
   newSummary,
-  placement,
 }: {
   active: InsightsTab | null;
   onSelect: (tab: InsightsTab) => void;
   newSummary: boolean;
-  placement: 'header' | 'panel';
 }) {
   return (
     <div
-      className={`insight-tabs insight-tabs-${placement}`}
+      className="insight-tabs insight-tabs-header"
       role="group"
       aria-label="Conversation tools"
       onClick={(event) => event.stopPropagation()}
@@ -642,7 +640,6 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
                 <InsightTabs
                   active={insights}
                   newSummary={newSummary}
-                  placement="header"
                   onSelect={(tab) => setInsights((current) => (current === tab ? null : tab))}
                 />
               )}
@@ -722,7 +719,6 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
                           <XIcon size={18} weight="bold" />
                         </button>
                       </header>
-                      <InsightTabs active={insights} newSummary={newSummary} placement="panel" onSelect={setInsights} />
                       <div className="sheet-body">
                         <Insights
                           room={room}

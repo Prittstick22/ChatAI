@@ -132,6 +132,11 @@
   padding: 16px 12px 8px 20px;
 }
 
+.sidebar:not(.sidebar-collapsed):not(.creating-group) .sidebar-top {
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
 .sidebar-brand-row {
   display: flex;
   align-items: center;
@@ -267,29 +272,46 @@
   box-shadow: 0 8px 20px -8px rgb(116 102 255 / 0.95), inset 0 1px 0 rgb(255 255 255 / 0.25);
 }
 
-.new-room {
-  overflow: hidden;
-}
-
-.new-room-inner {
-  padding: 6px 14px 12px 20px;
-}
-
-.new-room label {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.new-room-row {
+.room-selection {
+  position: relative;
   display: flex;
-  gap: 6px;
+  flex: 1;
+  min-height: 0;
 }
 
-.new-room-row input {
-  flex: 1;
+.new-room-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  align-items: start;
+  padding: 12px;
+  overflow-y: auto;
+  background: rgb(5 7 16 / 0.48);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  backdrop-filter: blur(14px) saturate(130%);
+}
+
+.new-room {
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  border: 1px solid var(--glass-edge);
+  border-radius: 20px;
+  background: var(--glass-strong);
+  box-shadow: var(--shadow-pop), var(--glass-shine);
+}
+
+.new-room .new-group {
+  padding: 16px;
+}
+
+.sidebar-create-cancel {
+  gap: 6px;
+  width: auto;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
 }
 
 .room-list {
@@ -2108,10 +2130,6 @@
   font-size: 14px;
 }
 
-.sheet .insight-tabs-panel {
-  margin: 0 26px 4px;
-}
-
 .sheet-body {
   flex: 1;
   min-height: 0;
@@ -2492,9 +2510,7 @@
     font-size: 22px;
   }
 
-  .sheet .insight-tabs-panel {
-    margin: 0 16px 2px;
-  }
+
 
   .sheet-body {
     padding: 14px 16px 28px;
