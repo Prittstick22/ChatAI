@@ -1,4 +1,4 @@
-import { CaretUpDownIcon, CheckIcon, PlusIcon, SidebarSimpleIcon, XIcon } from '@phosphor-icons/react';
+import { CaretUpDownIcon, CheckIcon, PlusIcon, SidebarSimpleIcon, TrashIcon, XIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar, RoomBadge } from './Avatar';
@@ -17,6 +17,7 @@ type Props = {
   onOpen: (room: string) => void;
   onCreate: (name: string, members: string[]) => Promise<void>;
   onToggleCollapsed: () => void;
+  onDelete: (room: string) => Promise<void>;
   onSwitchIdentity: (name: string) => void;
 };
 
@@ -31,15 +32,28 @@ function lastLine(room: Room, me: string, typing: string[]): { text: string; typ
   return { text: `${who}: ${text}`, typing: false };
 }
 
-export function Sidebar({ me, rooms, activeRoom, collapsed, online, typing, onOpen, onCreate, onToggleCollapsed, onSwitchIdentity }: Props) {
+export function Sidebar({ me, rooms, activeRoom, collapsed, online, typing, onOpen, onCreate, onToggleCollapsed, onDelete, onSwitchIdentity }: Props) {
   const [creating, setCreating] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [deletingRoom, setDeletingRoom] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const contacts = [...new Set([
     ...PEOPLE.map((person) => person.name),
     ...online,
     ...rooms.flatMap((room) => [...(room.members ?? []), room.created_by ?? '', room.last_message?.user ?? '']),
   ].filter(Boolean))];
+
+  const deleteRoom = async (room: Room) => {
+    if (deletingRoom || !window.confirm(`Delete ${room.name} for everyone? This cannot be undone.`)) return;
+    setDeletingRoom(room.id);
+    try {
+      await onDelete(room.id);
+    } catch {
+      // The parent reports API errors; keep the room visible when deletion fails.
+    } finally {
+      setDeletingRoom(null);
+    }
+  };
 
   useEffect(() => {
     if (!menu) return;
@@ -118,10 +132,10 @@ export function Sidebar({ me, rooms, activeRoom, collapsed, online, typing, onOp
           const active = room.id === activeRoom;
           const unread = active ? 0 : room.unread;
           return (
-            <motion.li key={room.id}>
+            <motion.li key={room.id} className="room-entry">
               <button
                 type="button"
-                className={['room-item', active && 'active', unread > 0 && 'unread'].filter(Boolean).join(' ')}
+                className={['room-item', room.created_by === me && 'deletable', active && 'active', unread > 0 && 'unread'].filter(Boolean).join(' ')}
                 aria-current={active ? 'page' : undefined}
                 aria-label={`${room.name}${unread ? `, ${unread} unread` : ''}`}
                 title={collapsed ? room.name : undefined}
@@ -157,6 +171,18 @@ export function Sidebar({ me, rooms, activeRoom, collapsed, online, typing, onOp
                   </span>
                 </span>
               </button>
+              {room.created_by === me && (
+                <button
+                  type="button"
+                  className="room-delete"
+                  aria-label={`Delete ${room.name} chat`}
+                  title="Delete chat for everyone"
+                  disabled={deletingRoom === room.id}
+                  onClick={() => void deleteRoom(room)}
+                >
+                  <TrashIcon size={17} aria-hidden="true" />
+                </button>
+              )}
             </motion.li>
           );
         })}

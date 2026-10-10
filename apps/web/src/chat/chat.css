@@ -313,6 +313,58 @@
   transition: background 0.15s;
 }
 
+.room-item.deletable {
+  padding-right: 42px;
+}
+
+.room-entry {
+  position: relative;
+}
+
+.room-delete {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+
+.room-entry:hover .room-delete,
+.room-entry:focus-within .room-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar-collapsed .room-delete {
+  display: none;
+}
+
+.room-delete:hover {
+  background: var(--hover);
+  color: #c23f3f;
+}
+
+.room-delete:disabled {
+  opacity: 0.45;
+}
+
+@media (hover: none) {
+  .room-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .room-item:hover {
   background: var(--hover);
 }

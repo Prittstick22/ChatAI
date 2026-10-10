@@ -35,6 +35,7 @@ export type Action =
   | { type: 'rooms/loaded'; rooms: Room[]; for: string }
   | { type: 'rooms/failed'; error: string }
   | { type: 'room/upsert'; room: Room }
+  | { type: 'room/deleted'; room: string }
   | { type: 'history/loading'; room: string }
   | { type: 'history/loaded'; room: string; messages: Message[]; older?: boolean }
   | { type: 'history/failed'; room: string; error: string }
@@ -132,6 +133,23 @@ export function reducer(state: State, action: Action): State {
       const existing = state.rooms[action.room.id];
       const room = existing ? { ...existing, ...action.room, unread: existing.unread } : action.room;
       return { ...state, rooms: { ...state.rooms, [room.id]: room } };
+    }
+    case 'room/deleted': {
+      const rooms = { ...state.rooms };
+      const messages = { ...state.messages };
+      const history = { ...state.history };
+      const typing = { ...state.typing };
+      const nudges = { ...state.nudges };
+      const summaries = { ...state.summaries };
+      const previousSummaries = { ...state.previousSummaries };
+      delete rooms[action.room];
+      delete messages[action.room];
+      delete history[action.room];
+      delete typing[action.room];
+      delete nudges[action.room];
+      delete summaries[action.room];
+      delete previousSummaries[action.room];
+      return { ...state, rooms, messages, history, typing, nudges, summaries, previousSummaries };
     }
 
     case 'history/loading': {

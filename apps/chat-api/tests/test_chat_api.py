@@ -260,6 +260,105 @@ def test_room_creation_without_members_keeps_legacy_visibility(client):
     )
 
 
+def test_only_creator_can_delete_owned_rooms_and_legacy_room_is_protected(client):
+    room = client.post(
+        "/rooms",
+        json={"name": "Weekend plan", "created_by": "Alex", "members": ["Sam"]},
+    ).json()
+
+    assert client.delete(f"/rooms/{room['id']}?user=Sam").status_code == 403
+    assert client.delete("/rooms/demo?user=Alex").status_code == 403
+    assert room["id"] in {r["id"] for r in client.get("/rooms?user=Alex").json()}
+    assert client.delete(f"/rooms/{room['id']}?user=Alex").json() == {
+        "deleted": True,
+        "room": room["id"],
+    }
+    assert client.delete(f"/rooms/{room['id']}?user=Alex").status_code == 404
+    assert (
+        client.post(
+            "/messages",
+            json={"room": room["id"], "user": "Sam", "text": "stale send"},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            "/polls",
+            json={
+                "room": room["id"],
+                "question": "Still here?",
+                "options": ["yes", "no"],
+            },
+        ).status_code
+        == 404
+    )
+    replacement = client.post(
+        "/rooms",
+        json={"name": "Weekend plan", "created_by": "Alex", "members": ["Sam"]},
+    ).json()
+    assert replacement["id"] != room["id"]
+
+
+def test_delete_room_removes_all_data_and_notifies_every_client(client):
+    room = client.post(
+        "/rooms",
+        json={"name": "Movie night", "created_by": "Alex", "members": ["Sam"]},
+    ).json()
+    message = post(client, "Meet at the cinema", room=room["id"])
+    client.post(
+        f"/messages/{message['id']}/reactions",
+        json={"user": "Sam", "emoji": "👍"},
+    )
+    poll, _ = store.create_poll(
+        "Which film?", ["Comedy", "Mystery"], room["id"], "Alex"
+    )
+    store.vote(poll["id"], "Sam", 0)
+    client.post(
+        f"/rooms/{room['id']}/read",
+        json={"user": "Sam", "message_id": message["id"]},
+    )
+
+    with client.websocket_connect("/ws?user=Alex") as alex:
+        with client.websocket_connect("/ws?user=Sam") as sam:
+            result = client.delete(f"/rooms/{room['id']}?user=Alex")
+            assert result.status_code == 200
+            expected = {"type": "room_deleted", "room": room["id"]}
+            assert receive(alex, "room_deleted") == expected
+            assert receive(sam, "room_deleted") == expected
+
+    assert room["id"] not in {r["id"] for r in client.get("/rooms?user=Alex").json()}
+    assert room["id"] not in {r["id"] for r in client.get("/rooms?user=Sam").json()}
+    assert client.get(f"/messages?room={room['id']}").json() == []
+    assert client.get(f"/polls?room={room['id']}").json() == []
+    with sqlite3.connect(store.db_path()) as db:
+        assert (
+            db.execute(
+                "SELECT COUNT(*) FROM rooms WHERE id = ?", (room["id"],)
+            ).fetchone()[0]
+            == 0
+        )
+        for table, column, value in (
+            ("messages", "room", room["id"]),
+            ("polls", "room", room["id"]),
+            ("room_members", "room", room["id"]),
+            ("reads", "room", room["id"]),
+            ("votes", "poll_id", poll["id"]),
+            ("reactions", "message_id", message["id"]),
+        ):
+            assert (
+                db.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE {column} = ?", (value,)
+                ).fetchone()[0]
+                == 0
+            ), table
+        assert (
+            db.execute(
+                "SELECT COUNT(*) FROM messages_fts WHERE text MATCH 'cinema'"
+            ).fetchone()[0]
+            == 0
+        )
+
+
 def test_websocket_events(client):
     with client.websocket_connect("/ws?user=Sam&room=demo") as sam:
         assert receive(sam, "presence")["online"] == ["Sam"]
