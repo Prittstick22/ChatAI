@@ -95,6 +95,7 @@ function toggled(reactions: Reaction[], emoji: string, me: string): Reaction[] {
 export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
   const [state, dispatch] = useReducer(reducer, me, initialState);
   const [activeRoom, openRoomHash] = useRoomHash();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showChat, setShowChat] = useState(() => readHash() !== null);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
@@ -308,6 +309,15 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
       case 'room':
         dispatch({ type: 'room/upsert', room: event.room });
         break;
+      case 'room_deleted':
+        dispatch({ type: 'room/deleted', room: event.room });
+        if (open === event.room) {
+          setReplyTo(null);
+          setEditing(null);
+          setHighlight(null);
+          setInsights(null);
+        }
+        break;
       case 'poll':
         dispatch({ type: 'poll', poll: event.poll });
         break;
@@ -460,6 +470,16 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
     openRoom(created.id);
   };
 
+  const deleteRoom = async (id: string) => {
+    try {
+      await chatApi.deleteRoom(id, me);
+      dispatch({ type: 'room/deleted', room: id });
+    } catch (e) {
+      toast(errorText(e));
+      throw e;
+    }
+  };
+
   // ---------------------------------------------------------------- derived view data
 
   const messages = (room && state.messages[room.id]) || EMPTY;
@@ -564,15 +584,18 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
   }
 
   return (
-    <div className={['app', showChat ? 'show-chat' : 'show-list'].join(' ')}>
+    <div className={['app', showChat ? 'show-chat' : 'show-list', sidebarCollapsed && 'sidebar-collapsed'].filter(Boolean).join(' ')}>
       <Sidebar
         me={me}
         rooms={roomList}
         activeRoom={activeRoom}
+        collapsed={sidebarCollapsed}
         online={state.online}
         typing={state.typing}
         onOpen={openRoom}
         onCreate={createRoom}
+        onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
+        onDelete={deleteRoom}
         onSwitchIdentity={onSwitchIdentity}
       />
 

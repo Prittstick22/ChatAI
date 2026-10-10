@@ -76,6 +76,10 @@ MIGRATIONS = [
     ALTER TABLE polls ADD COLUMN proposal_id TEXT;
     CREATE UNIQUE INDEX polls_room_proposal ON polls(room, proposal_id) WHERE proposal_id IS NOT NULL;
     """,
+    # 6: reserve deleted room IDs so stale clients cannot recreate deleted chats.
+    """
+    CREATE TABLE deleted_rooms(room TEXT PRIMARY KEY, deleted_at TEXT NOT NULL);
+    """,
 ]
 
 
@@ -93,6 +97,11 @@ class Conflict(Exception):
 
 class Invalid(Exception):
     pass
+
+
+def _assert_room_not_deleted(db: sqlite3.Connection, room: str) -> None:
+    if db.execute("SELECT 1 FROM deleted_rooms WHERE room = ?", (room,)).fetchone():
+        raise NotFound("Chat not found")
 
 
 def db_path() -> str:
@@ -333,6 +342,7 @@ def create_message(
     room: str, user: str, text: str, reply_to: int | None = None
 ) -> dict:
     with closing(connect()) as db:
+        _assert_room_not_deleted(db, room)
         if reply_to is not None:
             parent = db.execute(
                 "SELECT room FROM messages WHERE id = ?", (reply_to,)
@@ -493,6 +503,13 @@ def create_room(
                 "SELECT id FROM rooms WHERE id = ? OR id LIKE ?", (base, base + "-%")
             )
         }
+        taken.update(
+            r[0]
+            for r in db.execute(
+                "SELECT room FROM deleted_rooms WHERE room = ? OR room LIKE ?",
+                (base, base + "-%"),
+            )
+        )
         room_id, n = base, 2
         while room_id in taken:
             room_id, n = f"{base}-{n}", n + 1
@@ -516,10 +533,42 @@ def create_room(
         )
 
 
+def delete_room(room_id: str, user: str) -> None:
+    """Permanently delete a room and its data when requested by its creator."""
+    with closing(connect()) as db:
+        with db:
+            room = db.execute(
+                "SELECT created_by FROM rooms WHERE id = ?", (room_id,)
+            ).fetchone()
+            if room is None:
+                raise NotFound("Chat not found")
+            if room["created_by"] is None or room["created_by"] != user:
+                raise Forbidden("Only the chat creator can delete this chat")
+
+            db.execute(
+                "INSERT INTO deleted_rooms(room, deleted_at) VALUES (?, ?)",
+                (room_id, now()),
+            )
+            db.execute(
+                "DELETE FROM votes WHERE poll_id IN (SELECT id FROM polls WHERE room = ?)",
+                (room_id,),
+            )
+            db.execute(
+                "DELETE FROM reactions WHERE message_id IN (SELECT id FROM messages WHERE room = ?)",
+                (room_id,),
+            )
+            db.execute("DELETE FROM messages WHERE room = ?", (room_id,))
+            db.execute("DELETE FROM polls WHERE room = ?", (room_id,))
+            db.execute("DELETE FROM reads WHERE room = ?", (room_id,))
+            db.execute("DELETE FROM room_members WHERE room = ?", (room_id,))
+            db.execute("DELETE FROM rooms WHERE id = ?", (room_id,))
+
+
 def mark_read(room: str, user: str, message_id: int) -> tuple[int, bool]:
     """Move a user's read position forward (never back). Returns the position and
     whether it moved."""
     with closing(connect()) as db:
+        _assert_room_not_deleted(db, room)
         latest = (
             db.execute(
                 "SELECT MAX(id) FROM messages WHERE room = ?", (room,)
@@ -596,6 +645,7 @@ def create_poll(
     """Create a poll and the message that shows it in the conversation. A room gets one
     poll per AI proposal: asking again returns the existing poll and no message."""
     with closing(connect()) as db:
+        _assert_room_not_deleted(db, room)
         try:
             with db:
                 cur = db.execute(

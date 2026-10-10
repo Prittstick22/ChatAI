@@ -1,4 +1,4 @@
-import { CaretUpDownIcon, CheckIcon, PlusIcon, XIcon } from '@phosphor-icons/react';
+import { CaretUpDownIcon, CheckIcon, PlusIcon, SidebarSimpleIcon, TrashIcon, XIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar, RoomBadge } from './Avatar';
@@ -11,10 +11,13 @@ type Props = {
   me: string;
   rooms: Room[];
   activeRoom: string | null;
+  collapsed: boolean;
   online: string[];
   typing: Record<string, Record<string, number>>;
   onOpen: (room: string) => void;
   onCreate: (name: string, members: string[]) => Promise<void>;
+  onToggleCollapsed: () => void;
+  onDelete: (room: string) => Promise<void>;
   onSwitchIdentity: (name: string) => void;
 };
 
@@ -29,15 +32,28 @@ function lastLine(room: Room, me: string, typing: string[]): { text: string; typ
   return { text: `${who}: ${text}`, typing: false };
 }
 
-export function Sidebar({ me, rooms, activeRoom, online, typing, onOpen, onCreate, onSwitchIdentity }: Props) {
+export function Sidebar({ me, rooms, activeRoom, collapsed, online, typing, onOpen, onCreate, onToggleCollapsed, onDelete, onSwitchIdentity }: Props) {
   const [creating, setCreating] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [deletingRoom, setDeletingRoom] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const contacts = [...new Set([
     ...PEOPLE.map((person) => person.name),
     ...online,
     ...rooms.flatMap((room) => [...(room.members ?? []), room.created_by ?? '', room.last_message?.user ?? '']),
   ].filter(Boolean))];
+
+  const deleteRoom = async (room: Room) => {
+    if (deletingRoom || !window.confirm(`Delete ${room.name} for everyone? This cannot be undone.`)) return;
+    setDeletingRoom(room.id);
+    try {
+      await onDelete(room.id);
+    } catch {
+      // The parent reports API errors; keep the room visible when deletion fails.
+    } finally {
+      setDeletingRoom(null);
+    }
+  };
 
   useEffect(() => {
     if (!menu) return;
@@ -54,22 +70,39 @@ export function Sidebar({ me, rooms, activeRoom, online, typing, onOpen, onCreat
   }, [menu]);
 
   return (
-    <nav className="sidebar" aria-label="Rooms">
+    <nav className={collapsed ? 'sidebar sidebar-collapsed' : 'sidebar'} aria-label="Rooms">
       <div className="sidebar-top">
-        <span className="wordmark">ChatAI</span>
-        <button
-          type="button"
-          className={creating ? 'icon-button pressed' : 'icon-button'}
-          aria-label={creating ? 'Cancel new group' : 'New group'}
-          aria-expanded={creating}
-          onClick={() => {
-            setCreating((c) => !c);
-          }}
-        >
-          <motion.span animate={{ rotate: creating ? 45 : 0 }} transition={spring} style={{ display: 'flex' }}>
-            <PlusIcon size={20} weight="bold" />
-          </motion.span>
-        </button>
+        <div className="sidebar-brand-row">
+          <span className="wordmark">ChatAI</span>
+          <button
+            type="button"
+            className="icon-button sidebar-collapse"
+            aria-label={collapsed ? 'Expand room list' : 'Collapse room list'}
+            aria-expanded={!collapsed}
+            title={collapsed ? 'Expand room list' : 'Collapse room list'}
+            onClick={onToggleCollapsed}
+          >
+            <SidebarSimpleIcon size={20} mirrored={!collapsed} />
+          </button>
+        </div>
+        <div className="sidebar-tools">
+          <button
+            type="button"
+            className={creating ? 'icon-button pressed' : 'icon-button'}
+            aria-label={creating ? 'Cancel new group' : 'New group'}
+            aria-expanded={creating}
+            title={creating ? 'Cancel new group' : 'New group'}
+            onClick={() => {
+              if (collapsed) onToggleCollapsed();
+              setCreating((c) => !c);
+            }}
+          >
+            <motion.span animate={{ rotate: creating ? 45 : 0 }} transition={spring} style={{ display: 'flex' }}>
+              <PlusIcon size={20} weight="bold" />
+            </motion.span>
+            <span className="sidebar-tool-label">{creating ? 'Cancel' : 'Add new chat'}</span>
+          </button>
+        </div>
       </div>
 
       <AnimatePresence initial={false}>
@@ -99,15 +132,18 @@ export function Sidebar({ me, rooms, activeRoom, online, typing, onOpen, onCreat
           const active = room.id === activeRoom;
           const unread = active ? 0 : room.unread;
           return (
-            <motion.li key={room.id} layout transition={spring}>
+            <motion.li key={room.id} className="room-entry">
               <button
                 type="button"
-                className={['room-item', active && 'active', unread > 0 && 'unread'].filter(Boolean).join(' ')}
+                className={['room-item', room.created_by === me && 'deletable', active && 'active', unread > 0 && 'unread'].filter(Boolean).join(' ')}
                 aria-current={active ? 'page' : undefined}
+                aria-label={`${room.name}${unread ? `, ${unread} unread` : ''}`}
+                title={collapsed ? room.name : undefined}
                 onClick={() => onOpen(room.id)}
               >
                 {active && <motion.span layoutId="active-room" className="room-highlight" transition={spring} />}
                 <RoomBadge id={room.id} name={room.name} />
+                {unread > 0 && <span className="badge collapsed-badge">{unread > 99 ? '99+' : unread}</span>}
                 <span className="room-text">
                   <span className="room-name-line">
                     <span className="room-name">{room.name}</span>
@@ -135,6 +171,18 @@ export function Sidebar({ me, rooms, activeRoom, online, typing, onOpen, onCreat
                   </span>
                 </span>
               </button>
+              {room.created_by === me && (
+                <button
+                  type="button"
+                  className="room-delete"
+                  aria-label={`Delete ${room.name} chat`}
+                  title="Delete chat for everyone"
+                  disabled={deletingRoom === room.id}
+                  onClick={() => void deleteRoom(room)}
+                >
+                  <TrashIcon size={17} aria-hidden="true" />
+                </button>
+              )}
             </motion.li>
           );
         })}
@@ -172,7 +220,15 @@ export function Sidebar({ me, rooms, activeRoom, online, typing, onOpen, onCreat
             </motion.div>
           )}
         </AnimatePresence>
-        <button type="button" className="identity-button" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+        <button
+          type="button"
+          className="identity-button"
+          aria-label={`Switch demo person, currently ${me}${online.includes(me) ? ', online' : ', connecting'}`}
+          aria-haspopup="menu"
+          aria-expanded={menu}
+          title={collapsed ? `${me} · ${online.includes(me) ? 'Online' : 'Connecting'}` : undefined}
+          onClick={() => setMenu((m) => !m)}
+        >
           <Avatar name={me} size={34} online={online.includes(me)} />
           <span className="identity-copy">
             <span className="identity-name">{me}</span>
