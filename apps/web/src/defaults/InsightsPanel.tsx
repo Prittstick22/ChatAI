@@ -4,7 +4,7 @@ import { CalendarPlusIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { InsightsSlotProps, InsightsTab } from '../chat/slots';
-import type { Message, Poll } from '../chat/types';
+import type { Poll, SearchResponse, SearchResult } from '../chat/types';
 
 const TABS: { id: InsightsTab; label: string }[] = [
   { id: 'catchup', label: 'Catch up' },
@@ -39,9 +39,26 @@ function CatchUp({ room, api }: InsightsSlotProps) {
   );
 }
 
+function searchNote({ results, mode }: SearchResponse) {
+  if (results.length === 0) return 'No matching messages.';
+  const exact = results.some((r) => r.highlight);
+  const byMeaning = mode === 'semantic' && results.some((r) => !r.highlight);
+  if (exact && byMeaning) return 'Exact words highlighted, the rest matched by meaning';
+  return byMeaning ? 'Matched by meaning' : 'Matched by keyword';
+}
+
+function ResultText({ result }: { result: SearchResult }) {
+  if (!result.highlight) return <span>{result.text}</span>;
+  return (
+    <span>
+      {result.highlight.map((part, i) => (part.match ? <mark key={i}>{part.text}</mark> : part.text))}
+    </span>
+  );
+}
+
 function Search({ room, api, onJump }: InsightsSlotProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Async<{ results: Message[]; mode: string }>>({ state: 'idle' });
+  const [results, setResults] = useState<Async<SearchResponse>>({ state: 'idle' });
   useEffect(() => setResults({ state: 'idle' }), [room.id]);
   const run = async (e: FormEvent) => {
     e.preventDefault();
@@ -65,19 +82,13 @@ function Search({ room, api, onJump }: InsightsSlotProps) {
       {results.state === 'error' && <p className="field-error">{results.error}</p>}
       {results.state === 'done' && (
         <>
-          <p className="panel-note">
-            {results.value.results.length === 0
-              ? 'No matching messages.'
-              : results.value.mode === 'semantic'
-                ? 'Matched by meaning'
-                : 'Matched by keyword'}
-          </p>
+          <p className="panel-note">{searchNote(results.value)}</p>
           <ul className="panel-results">
             {results.value.results.map((m) => (
               <li key={m.id}>
                 <button type="button" onClick={() => onJump(m.id)}>
                   <strong>{m.user}</strong>
-                  <span>{m.text}</span>
+                  <ResultText result={m} />
                 </button>
               </li>
             ))}
