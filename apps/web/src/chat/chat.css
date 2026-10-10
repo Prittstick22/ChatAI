@@ -581,6 +581,15 @@
   border-radius: var(--r-panel);
 }
 
+.conversation-content {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .conv-header {
   display: flex;
   align-items: center;
@@ -1966,15 +1975,15 @@
 
 /* ================================================================ insights popup */
 
-/* Catch up, search and actions open over the conversation, which stays put (blurred)
-   underneath, so jumping to a message just closes the popup. */
+/* Keep the chat content in place under the panel so jumping to a message closes it. */
 .sheet-backdrop {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 40;
   display: grid;
-  place-items: center;
-  padding: 32px 20px;
+  place-items: start center;
+  padding: 20px;
+  overflow-y: auto;
   background: rgb(4 6 22 / 0.5);
   -webkit-backdrop-filter: blur(14px) saturate(130%);
   backdrop-filter: blur(14px) saturate(130%);
@@ -2401,8 +2410,8 @@
   }
 
   .sheet-backdrop {
-    place-items: end center;
-    padding: 56px 0 0;
+    place-items: start center;
+    padding: 14px 12px;
   }
 
   .sheet {

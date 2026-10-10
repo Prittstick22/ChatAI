@@ -647,7 +647,8 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
                 />
               )}
             </header>
-            <ConnectionBanner status={status} />
+            <div className="conversation-content">
+              <ConnectionBanner status={status} />
               <MessageList
                 room={room}
                 me={me}
@@ -683,6 +684,63 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
                 onTyping={(active) => send({ type: 'typing', room: room.id, active })}
                 onEditLast={editLast}
               />
+              <AnimatePresence>
+                {sheet && Insights && (
+                  <motion.div
+                    key="sheet"
+                    className="sheet-backdrop"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0, transition: { duration: 0.2 } }}
+                    transition={{ duration: 0.25 }}
+                    onClick={() => setInsights(null)}
+                  >
+                    <motion.div
+                      className="sheet glass"
+                      tabIndex={-1}
+                      autoFocus
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="sheet-title"
+                      initial={{ opacity: 0, y: 28, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 18, scale: 0.98, transition: { duration: 0.18 } }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <header className="sheet-head">
+                        <span className="sheet-icon" aria-hidden="true">
+                          <sheet.Icon size={22} weight="duotone" />
+                        </span>
+                        <div className="sheet-title">
+                          <h2 id="sheet-title">{sheet.label}</h2>
+                          <p>
+                            {room.name} · {sheet.about}
+                          </p>
+                        </div>
+                        <button type="button" className="icon-button" aria-label="Close" onClick={() => setInsights(null)}>
+                          <XIcon size={18} weight="bold" />
+                        </button>
+                      </header>
+                      <InsightTabs active={insights} newSummary={newSummary} placement="panel" onSelect={setInsights} />
+                      <div className="sheet-body">
+                        <Insights
+                          room={room}
+                          me={me}
+                          api={chatApi}
+                          messages={messages}
+                          tab={insights}
+                          onTab={setInsights}
+                          onJump={jumpFromSheet}
+                          summary={summary}
+                          previousSummary={state.previousSummaries[room.id]}
+                        />
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </>
         ) : (
           <div className="fullscreen-state inline">
@@ -690,63 +748,6 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
           </div>
         )}
       </section>
-
-      <AnimatePresence>
-        {room && sheet && Insights && (
-          <motion.div
-            key="sheet"
-            className="sheet-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.2 } }}
-            transition={{ duration: 0.25 }}
-            onClick={() => setInsights(null)}
-          >
-            <motion.div
-              className="sheet glass"
-              tabIndex={-1}
-              autoFocus
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="sheet-title"
-              initial={{ opacity: 0, y: 28, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 18, scale: 0.98, transition: { duration: 0.18 } }}
-              transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <header className="sheet-head">
-                <span className="sheet-icon" aria-hidden="true">
-                  <sheet.Icon size={22} weight="duotone" />
-                </span>
-                <div className="sheet-title">
-                  <h2 id="sheet-title">{sheet.label}</h2>
-                  <p>
-                    {room.name} · {sheet.about}
-                  </p>
-                </div>
-                <button type="button" className="icon-button" aria-label="Close" onClick={() => setInsights(null)}>
-                  <XIcon size={18} weight="bold" />
-                </button>
-              </header>
-              <InsightTabs active={insights} newSummary={newSummary} placement="panel" onSelect={setInsights} />
-              <div className="sheet-body">
-                <Insights
-                  room={room}
-                  me={me}
-                  api={chatApi}
-                  messages={messages}
-                  tab={insights}
-                  onTab={setInsights}
-                  onJump={jumpFromSheet}
-                  summary={summary}
-                  previousSummary={state.previousSummaries[room.id]}
-                />
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <DevPanel me={me} room={room} onSwitchIdentity={onSwitchIdentity} />
 
