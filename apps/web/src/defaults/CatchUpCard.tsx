@@ -121,15 +121,19 @@ export function CatchUpCard({ room, me, api, unread, summary, onJump, onOpenSumm
           transition={{ duration: 0.35, ease: EASE }}
         >
           <div className="away-head">
-            <SparkleIcon size={16} weight="fill" aria-hidden />
-            <h2>While you were away</h2>
+            <span className="away-icon" aria-hidden="true">
+              <SparkleIcon size={20} weight="fill" />
+            </span>
+            <div className="away-titles">
+              <h2>While you were away</h2>
+              <p className="away-meta">
+                {unread.length} new messages from {people}
+              </p>
+            </div>
             <button type="button" className="icon-button small" aria-label="Hide catch-up" onClick={() => setHidden(true)}>
               <XIcon size={14} weight="bold" />
             </button>
           </div>
-          <p className="away-meta">
-            {unread.length} new messages from {people}
-          </p>
 
           <AnimatePresence mode="wait" initial={false}>
             {waiting ? (

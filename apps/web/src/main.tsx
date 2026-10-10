@@ -2,9 +2,10 @@ import '@fontsource-variable/figtree';
 import { MotionConfig } from 'motion/react';
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Backdrop } from './chat/Backdrop';
 import { ChatApp } from './chat/ChatApp';
 import { IdentityGate } from './chat/IdentityGate';
-import { colorFor, saveIdentity, savedIdentity } from './chat/people';
+import { saveIdentity, savedIdentity } from './chat/people';
 import type { ChatSlots } from './chat/slots';
 import { CatchUpCard } from './defaults/CatchUpCard';
 import { InsightsPanel } from './defaults/InsightsPanel';
@@ -24,12 +25,7 @@ const slots: ChatSlots = {
 };
 
 function App() {
-  const [me, setMe] = useState(() => {
-    const saved = savedIdentity();
-    // Set the accent before the first paint so a reload doesn't fade in from blue.
-    if (saved) document.documentElement.style.setProperty('--accent', colorFor(saved));
-    return saved;
-  });
+  const [me, setMe] = useState(savedIdentity);
 
   const choose = (name: string) => {
     saveIdentity(name);
@@ -41,8 +37,12 @@ function App() {
     setMe(name);
   };
 
-  if (!me) return <IdentityGate onPick={choose} />;
-  return <ChatApp me={me} slots={slots} onSwitchIdentity={choose} />;
+  return (
+    <>
+      <Backdrop />
+      {me ? <ChatApp me={me} slots={slots} onSwitchIdentity={choose} /> : <IdentityGate onPick={choose} />}
+    </>
+  );
 }
 
 createRoot(document.getElementById('root')!).render(
