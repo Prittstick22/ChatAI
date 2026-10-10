@@ -15,7 +15,7 @@
 
   --night: #050716;
   --canvas: #0e1230;
-  --glass: rgb(13 17 44 / 0.44);
+  --glass: rgb(5 7 16 / 0.84);
   --glass-strong: rgb(17 21 54 / 0.86);
   --glass-edge: rgb(255 255 255 / 0.09);
   --glass-shine: inset 0 1px 0 rgb(255 255 255 / 0.07);
@@ -217,9 +217,11 @@ input[type='text']:focus-visible {
   z-index: -1;
   overflow: hidden;
   background:
-    radial-gradient(120% 80% at 50% -10%, #141a4a 0%, transparent 60%),
-    radial-gradient(90% 70% at 100% 100%, #120c35 0%, transparent 60%),
-    var(--night);
+    radial-gradient(75% 75% at 0% 0%, rgb(103 96 220 / 0.18), transparent 72%),
+    radial-gradient(75% 75% at 100% 0%, rgb(119 82 190 / 0.16), transparent 72%),
+    radial-gradient(75% 75% at 0% 100%, rgb(49 112 190 / 0.16), transparent 72%),
+    radial-gradient(75% 75% at 100% 100%, rgb(139 78 151 / 0.16), transparent 72%),
+    linear-gradient(135deg, #171b38, #11162e 52%, #19162f);
   pointer-events: none;
 }
 
@@ -230,7 +232,7 @@ input[type='text']:focus-visible {
   width: 70vmax;
   height: 70vmax;
   border-radius: 50%;
-  opacity: 0.8;
+  opacity: 0.38;
   will-change: transform;
   animation: drift 46s ease-in-out infinite alternate;
 }
