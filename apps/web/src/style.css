@@ -1,73 +1,55 @@
 /* Design tokens and base styles. Component styles live in chat/chat.css; feature
    components should keep their own scoped CSS and reuse these variables. */
 
-/* The accent is whoever you're chatting as. Registering it lets the whole UI ease
-   into a new colour when you switch identity. */
+/* One dark theme: a slow aurora behind frosted glass panels (Backdrop.tsx draws the
+   aurora). Glass surfaces are translucent and blur what's behind them; --canvas stays
+   solid for rings and small fills that sit on top of glass. */
 @property --accent {
   syntax: '<color>';
   inherits: true;
-  initial-value: #2f54eb;
+  initial-value: #7466ff;
 }
 
 :root {
   --font: 'Figtree Variable', 'Figtree', ui-sans-serif, system-ui, sans-serif;
 
-  --canvas: #ffffff;
-  --side: color-mix(in oklab, var(--accent) 5%, #f4f5f7);
-  --raised: #ffffff;
-  --bubble: #eff1f4;
-  --hover: color-mix(in oklab, var(--ink) 6%, transparent);
-  --line: #e3e6ea;
-  --ink: #1b1d22;
-  --muted: #656a73;
-  --faint: #8c929b;
-  --danger: #c92a2a;
-  --online: #1f9d63;
-  --warn-bg: #fff3d1;
-  --warn-ink: #714600;
-  --ok-bg: #def5e8;
-  --ok-ink: #0b6542;
+  --night: #050716;
+  --canvas: #0e1230;
+  --glass: rgb(13 17 44 / 0.44);
+  --glass-strong: rgb(17 21 54 / 0.86);
+  --glass-edge: rgb(255 255 255 / 0.09);
+  --glass-shine: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  --blur: blur(26px) saturate(160%);
+  --side: rgb(255 255 255 / 0.035);
+  --raised: rgb(24 29 70 / 0.92);
+  --bubble: rgb(255 255 255 / 0.075);
+  --hover: rgb(255 255 255 / 0.065);
+  --line: rgb(255 255 255 / 0.085);
+  --ink: #eef0ff;
+  --muted: #a2a7cf;
+  --faint: #6d73a2;
+  --danger: #ff7b8a;
+  --online: #3fe0a4;
+  --warn-bg: rgb(255 196 87 / 0.14);
+  --warn-ink: #ffd27d;
+  --ok-bg: rgb(63 224 164 / 0.14);
+  --ok-ink: #7ff0c3;
+  --accent: #7466ff;
+  --accent-2: #a064ff;
   --on-accent: #ffffff;
-  --accent-soft: color-mix(in oklab, var(--accent) 12%, var(--canvas));
-  --accent-text: color-mix(in oklab, var(--accent) 88%, black);
-  --shadow-pop: 0 14px 36px -14px rgb(18 22 30 / 0.32), 0 3px 8px -3px rgb(18 22 30 / 0.12);
-  --focus: 0 0 0 3px color-mix(in oklab, var(--accent) 32%, transparent);
+  --accent-soft: rgb(116 102 255 / 0.2);
+  --accent-text: #aea6ff;
+  --accent-fill: linear-gradient(135deg, #8a7bff, #6450f5 55%, #7b4dff);
+  --shadow-pop: 0 24px 60px -20px rgb(0 0 0 / 0.8), 0 4px 14px -4px rgb(0 0 0 / 0.5);
+  --shadow-panel: 0 40px 90px -40px rgb(0 0 0 / 0.85), 0 2px 0 rgb(255 255 255 / 0.02);
+  --focus: 0 0 0 3px rgb(116 102 255 / 0.45);
 
   --r-bubble: 20px;
   --r-join: 6px;
   --r-control: 12px;
+  --r-panel: 26px;
 
-  color-scheme: light;
-  transition: --accent 520ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --canvas: #16181c;
-    --side: color-mix(in oklab, var(--accent) 8%, #1c1f24);
-    --raised: #24272d;
-    --bubble: #272b31;
-    --line: #30343b;
-    --ink: #eceef1;
-    --muted: #a3a9b2;
-    --faint: #7d838c;
-    --danger: #ff8080;
-    --online: #3ecf8e;
-    --warn-bg: #3b2f12;
-    --warn-ink: #ffd98c;
-    --ok-bg: #11362a;
-    --ok-ink: #93e6c2;
-    --accent-soft: color-mix(in oklab, var(--accent) 22%, var(--canvas));
-    --accent-text: color-mix(in oklab, var(--accent) 50%, white);
-    --shadow-pop: 0 16px 40px -14px rgb(0 0 0 / 0.7), 0 3px 10px -3px rgb(0 0 0 / 0.45);
-    color-scheme: dark;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    transition: none;
-  }
+  color-scheme: dark;
 }
 
 *,
@@ -88,7 +70,7 @@ body {
   font-size: 15px;
   line-height: 1.45;
   color: var(--ink);
-  background: var(--canvas);
+  background: var(--night);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -124,13 +106,14 @@ button {
   padding: 0 14px;
   border: 0;
   border-radius: var(--r-control);
-  background: var(--accent);
+  background: var(--accent-fill);
+  box-shadow: 0 8px 22px -10px rgb(116 102 255 / 0.9), inset 0 1px 0 rgb(255 255 255 / 0.18);
   color: var(--on-accent);
   font-size: 14px;
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
-  transition: filter 0.15s, transform 0.15s;
+  transition: filter 0.15s, transform 0.15s, background-color 0.15s, border-color 0.15s;
 }
 
 .button:hover {
@@ -149,8 +132,14 @@ button {
 }
 
 .button.secondary {
-  background: var(--hover);
+  background: rgb(255 255 255 / 0.04);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
   color: var(--ink);
+}
+
+.button.secondary:hover {
+  background: rgb(255 255 255 / 0.08);
+  filter: none;
 }
 
 .icon-button {
@@ -196,7 +185,7 @@ input[type='text'] {
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: var(--r-control);
-  background: var(--canvas);
+  background: rgb(255 255 255 / 0.04);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
@@ -218,4 +207,112 @@ input[type='text']:focus-visible {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ---------------------------------------------------------------- animated background */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 50% -10%, #141a4a 0%, transparent 60%),
+    radial-gradient(90% 70% at 100% 100%, #120c35 0%, transparent 60%),
+    var(--night);
+  pointer-events: none;
+}
+
+/* Soft blobs of light. Each is a radial gradient (already soft, so no blur filter) moved
+   only by transform, which the compositor animates without repainting. */
+.aurora {
+  position: absolute;
+  width: 70vmax;
+  height: 70vmax;
+  border-radius: 50%;
+  opacity: 0.8;
+  will-change: transform;
+  animation: drift 46s ease-in-out infinite alternate;
+}
+
+.aurora-1 {
+  top: -30vmax;
+  left: -18vmax;
+  background: radial-gradient(circle, rgb(92 76 255 / 0.85), rgb(92 76 255 / 0) 62%);
+}
+
+.aurora-2 {
+  top: 8vmax;
+  right: -26vmax;
+  background: radial-gradient(circle, rgb(168 85 247 / 0.7), rgb(168 85 247 / 0) 62%);
+  animation-duration: 58s;
+  animation-delay: -20s;
+  animation-direction: alternate-reverse;
+}
+
+.aurora-3 {
+  bottom: -36vmax;
+  left: 18vmax;
+  background: radial-gradient(circle, rgb(37 132 255 / 0.6), rgb(37 132 255 / 0) 62%);
+  animation-duration: 64s;
+  animation-delay: -34s;
+}
+
+.aurora-4 {
+  top: 30vmax;
+  left: -30vmax;
+  width: 50vmax;
+  height: 50vmax;
+  background: radial-gradient(circle, rgb(236 72 153 / 0.38), rgb(236 72 153 / 0) 62%);
+  animation-duration: 52s;
+  animation-delay: -12s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(14vmax, 8vmax, 0) scale(1.12);
+  }
+  66% {
+    transform: translate3d(-6vmax, 16vmax, 0) scale(0.92);
+  }
+  100% {
+    transform: translate3d(10vmax, -6vmax, 0) scale(1.06);
+  }
+}
+
+.backdrop-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent 75%);
+}
+
+.backdrop-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.09;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora {
+    animation: none;
+  }
+}
+
+/* Frosted glass: a translucent fill that blurs the background through it. */
+.glass {
+  border: 1px solid var(--glass-edge);
+  background: var(--glass);
+  box-shadow: var(--shadow-panel), var(--glass-shine);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
 }

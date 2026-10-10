@@ -28,6 +28,8 @@ export type InsightsTab = 'catchup' | 'search' | 'actions';
 /** Inline card in the conversation, one per proposal received as a `nudge` event. */
 export type NudgeSlotProps = Base & {
   nudge: Proposal;
+  /** The loaded messages it was proposed from (source_message_ids), oldest first. */
+  sources?: ChatMessage[];
   onDismiss: () => void;
   onJump: (messageId: number) => void;
 };
