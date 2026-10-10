@@ -338,7 +338,9 @@ def test_keyword_search_ranks_more_matching_words_first(client):
 
 def test_keyword_search_follows_edits_and_deletes(client):
     m = post(client, "Meet at the library")
-    client.patch(f"/messages/{m['id']}", json={"user": "Alex", "text": "Meet at the gym"})
+    client.patch(
+        f"/messages/{m['id']}", json={"user": "Alex", "text": "Meet at the gym"}
+    )
     assert search(client, "library")["results"] == []
     assert [r["id"] for r in search(client, "gym")["results"]] == [m["id"]]
     client.delete(f"/messages/{m['id']}?user=Alex")
@@ -402,8 +404,19 @@ def test_nudges_reach_the_room_once(client):
         return {
             "proposals": [
                 {**POLL, "source_message_ids": [newest]},
-                {"id": "ghost", "type": "event", "title": "x", "source_message_ids": [999]},
-                {"id": "junk", "type": "poll", "question": "?", "options": ["one"], "source_message_ids": [newest]},
+                {
+                    "id": "ghost",
+                    "type": "event",
+                    "title": "x",
+                    "source_message_ids": [999],
+                },
+                {
+                    "id": "junk",
+                    "type": "poll",
+                    "question": "?",
+                    "options": ["one"],
+                    "source_message_ids": [newest],
+                },
             ]
         }
 
@@ -433,7 +446,9 @@ def test_nudges_wait_for_a_quiet_moment(client):
     calls = []
 
     async def fake_ask(path, payload, fallback):
-        calls.append(([m["id"] for m in payload["messages"]], payload["new_message_ids"]))
+        calls.append(
+            ([m["id"] for m in payload["messages"]], payload["new_message_ids"])
+        )
         return {"proposals": []}
 
     nudger.ask = fake_ask

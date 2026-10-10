@@ -8,9 +8,27 @@ import nudge_graph
 from nudge_graph import Detection, EventDraft, PollDraft
 
 CHAT = [
-    {"id": 1, "room": "demo", "user": "Alex", "text": "Where should we eat after?", "created_at": "2026-10-10T08:30:00+00:00"},
-    {"id": 2, "room": "demo", "user": "Sam", "text": "Lunch Saturday at noon?", "created_at": "2026-10-10T08:44:00+00:00"},
-    {"id": 3, "room": "demo", "user": "Alex", "text": "Works for me", "created_at": "2026-10-10T08:45:00+00:00"},
+    {
+        "id": 1,
+        "room": "demo",
+        "user": "Alex",
+        "text": "Where should we eat after?",
+        "created_at": "2026-10-10T08:30:00+00:00",
+    },
+    {
+        "id": 2,
+        "room": "demo",
+        "user": "Sam",
+        "text": "Lunch Saturday at noon?",
+        "created_at": "2026-10-10T08:44:00+00:00",
+    },
+    {
+        "id": 3,
+        "room": "demo",
+        "user": "Alex",
+        "text": "Works for me",
+        "created_at": "2026-10-10T08:45:00+00:00",
+    },
 ]
 
 
@@ -41,7 +59,14 @@ def run(model, messages=CHAT, new_ids=None):
 
 
 def event(**overrides):
-    fields = dict(title="Team lunch", description="Sam suggested noon and Alex agreed.", day="saturday", time="12:00", source_message_ids=[2, 3], confidence=0.9)
+    fields = dict(
+        title="Team lunch",
+        description="Sam suggested noon and Alex agreed.",
+        day="saturday",
+        time="12:00",
+        source_message_ids=[2, 3],
+        confidence=0.9,
+    )
     return EventDraft(**{**fields, **overrides})
 
 
@@ -62,20 +87,33 @@ def test_event_gets_a_resolved_start_time():
         "options": None,
     }
     assert [name for name, _ in model.calls] == ["Detection", "EventDraft"]
-    assert nudge_graph.describe(proposal) == "Add Team lunch on Sat 10 Oct, 12:00 to the calendar?"
+    assert (
+        nudge_graph.describe(proposal)
+        == "Add Team lunch on Sat 10 Oct, 12:00 to the calendar?"
+    )
 
 
 def test_event_without_a_clear_time_asks_for_one():
-    [proposal] = run(FakeModel(Detection=Detection(kind="event"), EventDraft=event(time=None)))
+    [proposal] = run(
+        FakeModel(Detection=Detection(kind="event"), EventDraft=event(time=None))
+    )
     assert proposal["start_at"] is None and proposal["id"] == "event-team-lunch"
     assert "Pick a time" in nudge_graph.describe(proposal)
 
 
 def test_poll_options_are_cleaned():
-    draft = PollDraft(question="Where should we eat?", options=[" Pizza ", "pizza", "Sushi"], source_message_ids=[1, 2], confidence=0.8)
+    draft = PollDraft(
+        question="Where should we eat?",
+        options=[" Pizza ", "pizza", "Sushi"],
+        source_message_ids=[1, 2],
+        confidence=0.8,
+    )
     [proposal] = run(FakeModel(Detection=Detection(kind="poll"), PollDraft=draft))
     assert proposal["id"] == "poll-pizza-sushi"
-    assert proposal["options"] == ["Pizza", "Sushi"] and proposal["question"] == "Where should we eat?"
+    assert (
+        proposal["options"] == ["Pizza", "Sushi"]
+        and proposal["question"] == "Where should we eat?"
+    )
     assert proposal["start_at"] is None and proposal["needs_confirmation"] is True
 
 
@@ -95,11 +133,22 @@ def test_nothing_detected_stops_after_one_call():
     ],
 )
 def test_weak_or_stale_events_are_dropped(draft, new_ids):
-    assert run(FakeModel(Detection=Detection(kind="event"), EventDraft=draft), new_ids=new_ids) == []
+    assert (
+        run(
+            FakeModel(Detection=Detection(kind="event"), EventDraft=draft),
+            new_ids=new_ids,
+        )
+        == []
+    )
 
 
 def test_poll_needs_two_options():
-    draft = PollDraft(question="Pizza?", options=["Pizza", "PIZZA"], source_message_ids=[1], confidence=0.9)
+    draft = PollDraft(
+        question="Pizza?",
+        options=["Pizza", "PIZZA"],
+        source_message_ids=[1],
+        confidence=0.9,
+    )
     assert run(FakeModel(Detection=Detection(kind="poll"), PollDraft=draft)) == []
 
 
@@ -123,12 +172,30 @@ def test_no_new_messages_skips_the_model():
 def test_suggest_endpoint(monkeypatch):
     client = TestClient(main.app)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    assert client.post("/suggest", json={"messages": CHAT}).json() == {"suggestion": "No suggestion", "proposals": []}
+    assert client.post("/suggest", json={"messages": CHAT}).json() == {
+        "suggestion": "No suggestion",
+        "proposals": [],
+    }
 
     monkeypatch.setenv("OPENAI_API_KEY", "test")
-    monkeypatch.setattr(main, "graph", nudge_graph.build_graph(FakeModel(Detection=Detection(kind="event"), EventDraft=event())))
-    body = client.post("/suggest", json={"messages": CHAT, "new_message_ids": [3]}).json()
-    assert body["suggestion"].startswith("Add Team lunch") and body["proposals"][0]["type"] == "event"
+    monkeypatch.setattr(
+        main,
+        "graph",
+        nudge_graph.build_graph(
+            FakeModel(Detection=Detection(kind="event"), EventDraft=event())
+        ),
+    )
+    body = client.post(
+        "/suggest", json={"messages": CHAT, "new_message_ids": [3]}
+    ).json()
+    assert (
+        body["suggestion"].startswith("Add Team lunch")
+        and body["proposals"][0]["type"] == "event"
+    )
 
-    monkeypatch.setattr(main, "graph", nudge_graph.build_graph(FakeModel(Detection=RuntimeError("provider down"))))
+    monkeypatch.setattr(
+        main,
+        "graph",
+        nudge_graph.build_graph(FakeModel(Detection=RuntimeError("provider down"))),
+    )
     assert client.post("/suggest", json={"messages": CHAT}).json()["proposals"] == []

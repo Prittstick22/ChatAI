@@ -120,7 +120,11 @@ def transcript(messages: list[dict], new_ids: set[int]) -> str:
             f"{m.get('user', 'Someone')}: {m.get('text', '')}"
         )
     latest = _said_at(messages[-1]).astimezone(when.LONDON) if messages else None
-    today = f"\n\nThe newest message was sent on {latest:%A} {latest.day} {latest:%B %Y} (Europe/London)." if latest else ""
+    today = (
+        f"\n\nThe newest message was sent on {latest:%A} {latest.day} {latest:%B %Y} (Europe/London)."
+        if latest
+        else ""
+    )
     return "\n".join(lines) + today
 
 
@@ -233,7 +237,9 @@ def build_graph(model):
     return graph.compile()
 
 
-async def propose(graph, messages: list[dict], new_ids: list[int] | None = None) -> list[dict]:
+async def propose(
+    graph, messages: list[dict], new_ids: list[int] | None = None
+) -> list[dict]:
     """Run the pipeline over the latest messages. `new_ids` are the messages not seen
     before (all of them when omitted)."""
     window = [m for m in messages if isinstance(m.get("id"), int)][-CONTEXT:]
@@ -256,7 +262,9 @@ async def propose(graph, messages: list[dict], new_ids: list[int] | None = None)
 def describe(proposal: dict) -> str:
     """One-sentence version for the legacy `suggestion` field."""
     if proposal["type"] == "poll":
-        return f"Start a poll: {proposal['question']} ({', '.join(proposal['options'])})"
+        return (
+            f"Start a poll: {proposal['question']} ({', '.join(proposal['options'])})"
+        )
     if proposal["start_at"]:
         start = datetime.fromisoformat(proposal["start_at"])
         return f"Add {proposal['title']} on {start:%a} {start.day} {start:%b, %H:%M} to the calendar?"
