@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, StringConstraints
 
+import devtools
 import nudges
 import store
 import summaries
@@ -253,7 +254,8 @@ async def react(message_id: int, body: ReactionIn):
 @app.websocket("/ws")
 async def ws_events(ws: WebSocket, user: str | None = None, room: str | None = None):
     """Server events: message, message_updated, typing, presence, read, room, poll,
-    pong, nudge (AI proposals, nudges.py) and summary (summaries.py). Client events:
+    pong, nudge (AI proposals, nudges.py), summary (summaries.py) and reset (the dev
+    tools replaced messages: reload). Client events:
     typing, ping."""
     await ws.accept()
     client = Client(ws, clean_user(user), room or None)
@@ -410,3 +412,88 @@ def calendar(title: str = "Group event", date: str = "20261010T120000Z"):
         media_type="text/calendar",
         headers={"Content-Disposition": "attachment; filename=event.ics"},
     )
+
+
+# ---------------------------------------------------------------- dev tools
+
+
+class DevReset(BaseModel):
+    story: str | None = Field(default=None, max_length=64)
+
+
+def _dev_tools_on() -> None:
+    if not devtools.ENABLED:
+        raise HTTPException(404, "Dev tools are off (DEV_TOOLS=0)")
+
+
+def _stop_background_work() -> None:
+    """Pending nudges and summaries are about messages that are about to go."""
+    for task in list(background):
+        task.cancel()
+
+
+def _room_name(room: str) -> str:
+    return next((r["name"] for r in store.list_rooms() if r["id"] == room), room)
+
+
+async def _replaced(
+    note: str, room: str | None, everything: bool = False, show: bool = False
+) -> None:
+    """After a room's messages were replaced (or every room's): forget what the AI had
+    worked out, prepare the room's summary so its catch-up is ready, and tell every
+    open tab to reload (opening the room when `show`)."""
+    for helper in (app.state.nudger, app.state.summariser):
+        helper.forget(None if everything else room)
+    if room and store.recent_for_ai(room):
+        await app.state.summariser.summarise_now(room)
+    event = {"type": "reset", "note": note}
+    await hub.broadcast({**event, "room": room} if show and room else event)
+
+
+@app.get("/dev/stories")
+def dev_stories():
+    """The premade chats in fixtures/."""
+    _dev_tools_on()
+    return devtools.stories()
+
+
+@app.post("/dev/stories/{story_id}")
+async def dev_load(story_id: str):
+    """Load a premade chat, replacing the room with its name."""
+    _dev_tools_on()
+    _stop_background_work()
+    loaded = devtools.load(story_id)
+    await _replaced(f"Loaded {loaded['name']}", loaded["room"], show=True)
+    return loaded
+
+
+@app.post("/dev/reset")
+async def dev_reset(body: DevReset):
+    """Back up the database and delete everything, then load `story` if given."""
+    _dev_tools_on()
+    _stop_background_work()
+    backup, loaded = devtools.reset(body.story)
+    note = f"Started again with {loaded['name']}" if loaded else "Deleted every chat"
+    await _replaced(note, loaded and loaded["room"], everything=True, show=True)
+    return {"backup": backup, "loaded": loaded}
+
+
+@app.post("/dev/rooms/{room}/clear")
+async def dev_clear(room: str):
+    """Delete a room's messages; the room and its members stay."""
+    _dev_tools_on()
+    _stop_background_work()
+    name = _room_name(room)
+    store.clear_room(room)
+    await _replaced(f"Cleared {name}", room)
+    return {"room": room}
+
+
+@app.delete("/dev/rooms/{room}")
+async def dev_delete_room(room: str):
+    _dev_tools_on()
+    _stop_background_work()
+    name = _room_name(room)
+    store.delete_room(room)
+    await _replaced(f"Deleted {name}", room)
+    return {"room": room}

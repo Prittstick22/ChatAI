@@ -111,6 +111,7 @@ export type ServerEvent =
   | { type: 'poll'; poll: Poll }
   | { type: 'nudge'; room: string; nudge: Proposal }
   | { type: 'summary'; room: string; summary: Summary }
+  | { type: 'reset'; note?: string; room?: string } // dev tools replaced messages: reload (and open room)
   | { type: 'pong' };
 
 /** A message as the UI holds it: server data plus local delivery state. */

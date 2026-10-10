@@ -9,7 +9,8 @@ services:
       DB_PATH: /data/chat.db
       AI_URL: http://ai:8001
       CORS_ORIGINS: http://localhost:5173
-    volumes: ["chatdata:/data"]
+      FIXTURES_DIR: /fixtures # premade chats for the dev panel
+    volumes: ["chatdata:/data", "./fixtures:/fixtures:ro"]
     ports: ["8000:8000"]
     depends_on: [ai]
   web:
