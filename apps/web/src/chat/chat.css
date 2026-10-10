@@ -2,7 +2,7 @@
 
 .app {
   display: grid;
-  grid-template-columns: 296px minmax(0, 1fr) auto;
+  grid-template-columns: 296px minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
 }
@@ -382,6 +382,7 @@
   min-height: 64px;
   padding: 10px 14px 10px 20px;
   border-bottom: 1px solid var(--line);
+  cursor: pointer;
 }
 
 .conv-header .back {
@@ -389,12 +390,28 @@
   margin-left: -8px;
 }
 
-.conv-title {
-  min-width: 0;
+.room-home-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
 }
 
-.conv-title h1 {
-  margin: 0;
+.conv-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.conv-title-name {
+  min-width: 0;
   overflow: hidden;
   font-size: 17px;
   font-weight: 700;
@@ -404,6 +421,7 @@
 }
 
 .conv-sub {
+  display: block;
   margin: 0;
   overflow: hidden;
   color: var(--muted);
@@ -417,9 +435,10 @@
   font-weight: 600;
 }
 
-.conv-actions {
-  display: flex;
-  gap: 2px;
+.insight-tabs-header {
+  flex: none;
+  width: min(480px, 58%);
+  max-width: 58%;
   margin-left: auto;
 }
 
@@ -1306,54 +1325,40 @@
 /* ================================================================ insights panel */
 
 .panel {
-  overflow: hidden;
+  display: flex;
+  flex: 1;
   min-height: 0;
-  border-left: 1px solid var(--line);
-  background: var(--side);
+  overflow: hidden;
+  background: var(--canvas);
 }
 
 .panel-inner {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  width: 380px;
-  height: 100%;
-  padding: 0 18px 20px;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
 
-.panel-top {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 64px;
-  background: var(--side);
-}
-
-.panel-top h2 {
-  margin: 0;
-  overflow: hidden;
-  font-size: 16px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.tabs {
+.insight-tabs {
   display: flex;
   gap: 2px;
-  margin-bottom: 18px;
   padding: 3px;
   border-radius: 12px;
   background: var(--hover);
+  cursor: default;
 }
 
 .tab {
   position: relative;
   flex: 1;
+  min-width: 0;
   height: 32px;
+  padding: 0 10px;
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -1374,8 +1379,19 @@
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
 }
 
-.tab > span:last-child {
+.tab-label {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insight-tab-icon {
+  flex: none;
 }
 
 .panel-section {
@@ -1639,15 +1655,8 @@
 
 /* ================================================================ narrow screens */
 
-@media (max-width: 1100px) {
-  .app.with-panel {
-    grid-template-columns: 260px minmax(0, 1fr) auto;
-  }
-}
-
 @media (max-width: 760px) {
-  .app,
-  .app.with-panel {
+  .app {
     position: relative;
     grid-template-columns: 100%;
   }
@@ -1675,11 +1684,22 @@
   }
 
   .conv-header {
+    flex-wrap: wrap;
     padding: 8px 10px;
   }
 
   .conv-header .back {
     display: inline-grid;
+  }
+
+  .conv-title {
+    flex: 1;
+  }
+
+  .insight-tabs-header {
+    flex: 1 0 100%;
+    max-width: none;
+    margin-left: 0;
   }
 
   .list-content {
@@ -1694,16 +1714,9 @@
     padding: 0 10px 10px;
   }
 
-  .panel {
-    position: fixed;
-    inset: 0;
-    z-index: 30;
-    width: 100% !important;
-    border-left: 0;
-  }
-
   .panel-inner {
     width: 100%;
+    padding: 18px 12px 24px;
   }
 
   .toasts {
@@ -1719,17 +1732,11 @@
   }
 }
 
-/* Unseen-summary marker on the insights button. */
-.conv-actions .icon-button {
-  position: relative;
-}
-
 .button-dot {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 8px;
-  height: 8px;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-left: 1px;
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 2px var(--canvas);

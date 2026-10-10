@@ -1,17 +1,11 @@
 // Default insights panel: the scaffold's catch-up, search and actions tools, moved out
 // of the main layout. Replace it in main.tsx with the features/ panels when they land.
 import { CalendarPlusIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import type { InsightsSlotProps, InsightsTab } from '../chat/slots';
+import type { InsightsSlotProps } from '../chat/slots';
 import type { Poll, SearchResponse, SearchResult, Summary } from '../chat/types';
 import { SummarySkeleton, SummaryView, type SummaryTab } from './SummaryView';
-
-const TABS: { id: InsightsTab; label: string }[] = [
-  { id: 'catchup', label: 'Catch up' },
-  { id: 'search', label: 'Search' },
-  { id: 'actions', label: 'Actions' },
-];
 
 type Async<T> = { state: 'idle' } | { state: 'busy' } | { state: 'done'; value: T } | { state: 'error'; error: string };
 
@@ -229,24 +223,12 @@ function Actions({ room, me, api }: InsightsSlotProps) {
 }
 
 export function InsightsPanel(props: InsightsSlotProps) {
-  const { tab, onTab } = props;
+  const { tab } = props;
   return (
     <div className="insights">
-      <div className="tabs" role="tablist">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'tab active' : 'tab'} onClick={() => onTab(t.id)}>
-            {tab === t.id && <motion.span layoutId="insights-tab" className="tab-highlight" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
-            <span>{t.label}</span>
-          </button>
-        ))}
-      </div>
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
-          {tab === 'catchup' && <CatchUp {...props} />}
-          {tab === 'search' && <Search {...props} />}
-          {tab === 'actions' && <Actions {...props} />}
-        </motion.div>
-      </AnimatePresence>
+      {tab === 'catchup' && <CatchUp {...props} />}
+      {tab === 'search' && <Search {...props} />}
+      {tab === 'actions' && <Actions {...props} />}
     </div>
   );
 }

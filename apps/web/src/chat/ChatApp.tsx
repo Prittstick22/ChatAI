@@ -1,4 +1,4 @@
-import { ArrowClockwiseIcon, CaretLeftIcon, MagnifyingGlassIcon, SidebarSimpleIcon } from '@phosphor-icons/react';
+import { ArrowClockwiseIcon, CalendarDotsIcon, CaretLeftIcon, MagnifyingGlassIcon, NotePencilIcon, type Icon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { ApiError, chatApi } from './api';
@@ -19,6 +19,50 @@ type Props = { me: string; slots: ChatSlots; onSwitchIdentity: (name: string) =>
 
 const errorText = (e: unknown) => (e instanceof ApiError || e instanceof Error ? e.message : 'Something went wrong.');
 const localId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+const INSIGHT_TABS: { id: InsightsTab; label: string; Icon: Icon }[] = [
+  { id: 'catchup', label: 'Catch up', Icon: NotePencilIcon },
+  { id: 'search', label: 'Search', Icon: MagnifyingGlassIcon },
+  { id: 'actions', label: 'Actions', Icon: CalendarDotsIcon },
+];
+
+function InsightTabs({
+  active,
+  onSelect,
+  newSummary,
+  placement,
+}: {
+  active: InsightsTab | null;
+  onSelect: (tab: InsightsTab) => void;
+  newSummary: boolean;
+  placement: 'header' | 'panel';
+}) {
+  return (
+    <div
+      className={`insight-tabs insight-tabs-${placement}`}
+      role="group"
+      aria-label="Conversation tools"
+      onClick={(event) => event.stopPropagation()}
+    >
+      {INSIGHT_TABS.map(({ id, label, Icon }) => (
+        <button
+          key={id}
+          type="button"
+          className={active === id ? 'tab active' : 'tab'}
+          aria-label={id === 'catchup' && newSummary ? 'Catch up, new summary' : label}
+          aria-pressed={active === id}
+          onClick={() => onSelect(id)}
+        >
+          {active === id && <span className="tab-highlight" aria-hidden="true" />}
+          <span className="tab-label">
+            <Icon className={`insight-tab-icon insight-tab-icon-${id}`} size={id === 'search' ? 21 : 18} weight="regular" aria-hidden="true" />
+            {label}
+          </span>
+          {id === 'catchup' && newSummary && <span className="button-dot" aria-hidden="true" />}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function readHash(): string | null {
   return decodeURIComponent(location.hash.replace(/^#\/?/, '')) || null;
@@ -471,7 +515,7 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
   }
 
   return (
-    <div className={['app', showChat ? 'show-chat' : 'show-list', insights && Insights ? 'with-panel' : ''].join(' ')}>
+    <div className={['app', showChat ? 'show-chat' : 'show-list'].join(' ')}>
       <Sidebar
         me={me}
         rooms={roomList}
@@ -486,15 +530,27 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
       <section className="conversation" aria-label={room ? room.name : 'Conversation'}>
         {room ? (
           <>
-            <header className="conv-header">
+            <header className="conv-header" onClick={() => setInsights(null)}>
               <button type="button" className="icon-button back" aria-label="All rooms" onClick={() => setShowChat(false)}>
                 <CaretLeftIcon size={22} weight="bold" />
               </button>
-              <RoomBadge id={room.id} name={room.name} size={38} />
-              <div className="conv-title">
-                <h1>{room.name}</h1>
+              <button
+                type="button"
+                className="room-home-button"
+                aria-label={`Return to ${room.name} chat`}
+                onClick={() => setInsights(null)}
+              >
+                <RoomBadge id={room.id} name={room.name} size={38} />
+              </button>
+              <button
+                type="button"
+                className="conv-title"
+                aria-label={`Return to ${room.name} chat`}
+                onClick={() => setInsights(null)}
+              >
+                <span className="conv-title-name" role="heading" aria-level={1}>{room.name}</span>
                 <AnimatePresence mode="wait" initial={false}>
-                  <motion.p
+                  <motion.span
                     key={subtitle}
                     className={typingUsers.length ? 'conv-sub typing' : 'conv-sub'}
                     initial={{ opacity: 0, y: 4 }}
@@ -503,79 +559,73 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
                     transition={{ duration: 0.15 }}
                   >
                     {subtitle}
-                  </motion.p>
+                  </motion.span>
                 </AnimatePresence>
-              </div>
+              </button>
               {Insights && (
-                <div className="conv-actions">
-                  <button
-                    type="button"
-                    className={insights === 'search' ? 'icon-button pressed' : 'icon-button'}
-                    aria-label="Search messages"
-                    aria-pressed={insights === 'search'}
-                    onClick={() => setInsights((t) => (t === 'search' ? null : 'search'))}
-                  >
-                    <MagnifyingGlassIcon size={20} />
-                  </button>
-                  <button
-                    type="button"
-                    className={insights && insights !== 'search' ? 'icon-button pressed' : 'icon-button'}
-                    aria-label={newSummary ? 'Insights panel, new summary' : 'Insights panel'}
-                    aria-pressed={Boolean(insights && insights !== 'search')}
-                    onClick={() => setInsights((t) => (t && t !== 'search' ? null : 'catchup'))}
-                  >
-                    <SidebarSimpleIcon size={20} mirrored />
-                    <AnimatePresence>
-                      {newSummary && (
-                        <motion.span
-                          key="dot"
-                          className="button-dot"
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          exit={{ scale: 0 }}
-                          transition={{ type: 'spring', stiffness: 600, damping: 22 }}
-                        />
-                      )}
-                    </AnimatePresence>
-                  </button>
-                </div>
+                <InsightTabs
+                  active={insights}
+                  newSummary={newSummary}
+                  placement="header"
+                  onSelect={(tab) => setInsights((current) => (current === tab ? null : tab))}
+                />
               )}
             </header>
             <ConnectionBanner status={status} />
-            <MessageList
-              room={room}
-              me={me}
-              messages={messages}
-              history={state.history[room.id]}
-              typing={typingUsers}
-              unreadAfter={unreadAfter.room === room.id ? unreadAfter.id : null}
-              highlight={highlight}
-              actions={actions}
-              onLoadOlder={loadOlder}
-              onRetry={() => loadHistory(room.id)}
-              onAtBottom={onAtBottom}
-              renderCatchUp={renderCatchUp}
-              inserts={inserts}
-            />
-            <Composer
-              ref={composer}
-              room={room}
-              replyTo={replyTo}
-              editing={editing}
-              accessory={
-                ComposerSlot && (
-                  <ComposerSlot room={room} me={me} api={chatApi} messages={messages} insert={(text) => composer.current?.insert(text)} />
-                )
-              }
-              onSend={sendMessage}
-              onSaveEdit={saveEdit}
-              onCancel={() => {
-                setReplyTo(null);
-                setEditing(null);
-              }}
-              onTyping={(active) => send({ type: 'typing', room: room.id, active })}
-              onEditLast={editLast}
-            />
+            {insights && Insights ? (
+              <div className="panel" aria-label="Conversation tools">
+                <div className="panel-inner">
+                  <Insights
+                    room={room}
+                    me={me}
+                    api={chatApi}
+                    messages={messages}
+                    tab={insights}
+                    onTab={setInsights}
+                    onJump={jumpTo}
+                    summary={summary}
+                    previousSummary={state.previousSummaries[room.id]}
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                <MessageList
+                  room={room}
+                  me={me}
+                  messages={messages}
+                  history={state.history[room.id]}
+                  typing={typingUsers}
+                  unreadAfter={unreadAfter.room === room.id ? unreadAfter.id : null}
+                  highlight={highlight}
+                  actions={actions}
+                  onLoadOlder={loadOlder}
+                  onRetry={() => loadHistory(room.id)}
+                  onAtBottom={onAtBottom}
+                  renderCatchUp={renderCatchUp}
+                  inserts={inserts}
+                />
+                <Composer
+                  ref={composer}
+                  room={room}
+                  replyTo={replyTo}
+                  editing={editing}
+                  accessory={
+                    ComposerSlot && (
+                      <ComposerSlot room={room} me={me} api={chatApi} messages={messages} insert={(text) => composer.current?.insert(text)} />
+                    )
+                  }
+                  onSend={sendMessage}
+                  onSaveEdit={saveEdit}
+                  onCancel={() => {
+                    setReplyTo(null);
+                    setEditing(null);
+                  }}
+                  onTyping={(active) => send({ type: 'typing', room: room.id, active })}
+                  onEditLast={editLast}
+                />
+              </>
+            )}
           </>
         ) : (
           <div className="fullscreen-state inline">
@@ -583,40 +633,6 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
           </div>
         )}
       </section>
-
-      <AnimatePresence initial={false}>
-        {insights && Insights && room && (
-          <motion.aside
-            key="panel"
-            className="panel"
-            aria-label="Insights"
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 380, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 40 }}
-          >
-            <div className="panel-inner">
-              <div className="panel-top">
-                <h2>{room.name}</h2>
-                <button type="button" className="icon-button small" aria-label="Close panel" onClick={() => setInsights(null)}>
-                  <SidebarSimpleIcon size={18} mirrored />
-                </button>
-              </div>
-              <Insights
-                room={room}
-                me={me}
-                api={chatApi}
-                messages={messages}
-                tab={insights}
-                onTab={setInsights}
-                onJump={jumpTo}
-                summary={summary}
-                previousSummary={state.previousSummaries[room.id]}
-              />
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
 
       <div className="toasts" aria-live="assertive">
         <AnimatePresence>
