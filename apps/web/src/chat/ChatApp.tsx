@@ -93,6 +93,7 @@ function toggled(reactions: Reaction[], emoji: string, me: string): Reaction[] {
 export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
   const [state, dispatch] = useReducer(reducer, me, initialState);
   const [activeRoom, openRoomHash] = useRoomHash();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showChat, setShowChat] = useState(() => readHash() !== null);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
@@ -530,15 +531,17 @@ export function ChatApp({ me, slots, onSwitchIdentity }: Props) {
   }
 
   return (
-    <div className={['app', showChat ? 'show-chat' : 'show-list'].join(' ')}>
+    <div className={['app', showChat ? 'show-chat' : 'show-list', sidebarCollapsed && 'sidebar-collapsed'].filter(Boolean).join(' ')}>
       <Sidebar
         me={me}
         rooms={roomList}
         activeRoom={activeRoom}
+        collapsed={sidebarCollapsed}
         online={state.online}
         typing={state.typing}
         onOpen={openRoom}
         onCreate={createRoom}
+        onToggleCollapsed={() => setSidebarCollapsed((collapsed) => !collapsed)}
         onSwitchIdentity={onSwitchIdentity}
       />
 
