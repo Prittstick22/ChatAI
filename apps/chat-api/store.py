@@ -261,9 +261,7 @@ def _fts_query(text: str) -> str | None:
 def _segments(marked: str) -> list[dict]:
     """Split highlight() output into segments: matched words get match=True."""
     parts = re.split(f"[{HIT_START}{HIT_END}]", marked)
-    return [
-        {"text": part, "match": i % 2 == 1} for i, part in enumerate(parts) if part
-    ]
+    return [{"text": part, "match": i % 2 == 1} for i, part in enumerate(parts) if part]
 
 
 def search_messages(room: str, text: str, limit: int = SEARCH_LIMIT) -> list[dict]:

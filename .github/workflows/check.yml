@@ -13,6 +13,20 @@ jobs:
             uv sync --locked --directory apps/$service
             uv run --directory apps/$service python -m compileall -q main.py
           done
+  python-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.2.0
+      # Each service's locked ruff (dev group). Fix locally with: uv run ruff format .
+      - run: |
+          failed=0
+          for service in chat-api ai-service; do
+            echo "::group::$service"
+            uv run --locked --directory apps/$service ruff format --diff . || failed=1
+            echo "::endgroup::"
+          done
+          exit $failed
   frontend-build:
     runs-on: ubuntu-latest
     defaults:
