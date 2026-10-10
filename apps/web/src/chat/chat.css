@@ -762,7 +762,7 @@
 /* ---------------------------------------------------------------- while you were away */
 
 .away {
-  width: min(100%, 560px);
+  width: min(100%, 560px); /* same as .nudge, so the cards line up */
   margin: 16px auto 8px;
   padding: 18px 18px 14px;
   overflow: hidden;
@@ -1384,7 +1384,7 @@
 }
 
 .nudge {
-  width: min(100%, 520px);
+  width: min(100%, 560px); /* same as .away */
   padding: 16px 16px 14px;
   border: 1px solid rgb(150 138 255 / 0.24);
   border-radius: 24px;
@@ -1859,12 +1859,14 @@
   padding: 0 24px 18px;
 }
 
-/* Smart replies (defaults/SmartReplies.tsx): chips above the composer. */
+/* Smart replies (defaults/SmartReplies.tsx): chips above the composer, lined up with
+   the bubbles. The sparkle sits in the avatar column (.row-avatar, 30px) and the gap
+   matches the row's. */
 .smart-replies {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 4px 10px;
+  padding: 4px 0 10px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1875,6 +1877,7 @@
 
 .smart-replies-icon {
   flex: none;
+  margin: 0 7px; /* 16px icon centred in 30px */
   color: var(--accent-text);
 }
 
@@ -2592,7 +2595,7 @@
   }
 
   .composer-wrap {
-    padding: 0 10px 10px;
+    padding: 0 12px 10px;
   }
 
   .toasts {
