@@ -503,9 +503,7 @@ def create_room(
             )
             if members is not None:
                 participants = list(
-                    dict.fromkeys(
-                        ([created_by] if created_by else []) + members
-                    )
+                    dict.fromkeys(([created_by] if created_by else []) + members)
                 )
                 db.executemany(
                     "INSERT INTO room_members(room, user) VALUES (?, ?)",

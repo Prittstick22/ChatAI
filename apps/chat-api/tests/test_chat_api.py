@@ -226,7 +226,9 @@ def test_group_rooms_store_members_and_are_listed_only_for_them(client):
 
     alex_rooms = {room["id"]: room for room in client.get("/rooms?user=Alex").json()}
     sam_rooms = {room["id"]: room for room in client.get("/rooms?user=Sam").json()}
-    jordan_rooms = {room["id"]: room for room in client.get("/rooms?user=Jordan").json()}
+    jordan_rooms = {
+        room["id"]: room for room in client.get("/rooms?user=Jordan").json()
+    }
     assert created["id"] in alex_rooms and created["id"] in sam_rooms
     assert created["id"] not in jordan_rooms
     assert alex_rooms[created["id"]]["members"] == created["members"]
