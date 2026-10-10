@@ -1,9 +1,15 @@
+import logging
 import os
 from fastapi import FastAPI
 from pydantic import BaseModel
 from openai import AsyncOpenAI
 
+import nudge_graph
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("ai-service")
 app = FastAPI(title="ChatAI Intelligence")
+graph = nudge_graph.build_graph(nudge_graph.chat_model())
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY") or "missing")
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
@@ -53,8 +59,21 @@ async def search(req: Conversation):
     except Exception:
         return {"results": [m for m in req.messages if req.query.lower() in str(m.get("text","")).lower()][:8], "mode": "keyword-fallback"}
 
+class SuggestRequest(BaseModel):
+    messages: list[dict] = []
+    # Messages the caller hasn't had analysed yet; proposals must cite one of them.
+    # Omitted means all of them (the legacy GET /suggest button).
+    new_message_ids: list[int] | None = None
+
 @app.post("/suggest")
-async def suggest(req: Conversation):
-    transcript = "\n".join(f"{m.get('user', 'Member')}: {m.get('text', '')}" for m in req.messages[-30:])
-    text = await ask("Identify ONE likely event or unresolved poll choice from this conversation. Respond in one short sentence as a suggestion, never claim it is scheduled. If none, respond 'No suggestion'.\n" + transcript, "No suggestion")
-    return {"suggestion": text}
+async def suggest(req: SuggestRequest):
+    """Structured proposals from the nudge graph (nudge_graph.py), plus the legacy
+    one-sentence `suggestion` for older callers."""
+    proposals = []
+    if os.getenv("OPENAI_API_KEY"):
+        try:
+            proposals = await nudge_graph.propose(graph, req.messages, req.new_message_ids)
+        except Exception as exc:
+            log.warning("nudge graph failed: %r", exc)
+    suggestion = nudge_graph.describe(proposals[0]) if proposals else "No suggestion"
+    return {"suggestion": suggestion, "proposals": proposals}
