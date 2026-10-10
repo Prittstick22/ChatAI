@@ -6,6 +6,7 @@ import { ChatApp } from './chat/ChatApp';
 import { IdentityGate } from './chat/IdentityGate';
 import { colorFor, saveIdentity, savedIdentity } from './chat/people';
 import type { ChatSlots } from './chat/slots';
+import { CatchUpCard } from './defaults/CatchUpCard';
 import { InsightsPanel } from './defaults/InsightsPanel';
 import { NudgeCard } from './defaults/NudgeCard';
 import { PollCard } from './defaults/PollCard';
@@ -18,7 +19,7 @@ const slots: ChatSlots = {
   insights: InsightsPanel, // side panel: catch-up, search, actions
   nudge: NudgeCard, // inline card for each `nudge` WebSocket event
   poll: PollCard, // a poll posted into the conversation, with live voting
-  // catchUp: CatchUpCard,   // on the "new messages" divider when a room opens with unread
+  catchUp: CatchUpCard, // "While you were away", on the new-messages divider
   // composer: SmartReplies, // row above the composer; receives insert(text)
 };
 
